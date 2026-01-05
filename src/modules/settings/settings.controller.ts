@@ -1,7 +1,10 @@
-import { Controller, Get, Put, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Put, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto, SettingsResponseDto } from './dto/settings.dto';
+import { RolesGuard } from '../../guards/roles.guard';
+import { Roles } from '../../guards/roles.decorator';
 
 @ApiTags('Configuración')
 @Controller('settings')
@@ -23,6 +26,9 @@ export class SettingsController {
   }
 
   @Put()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Actualizar configuración',
@@ -37,6 +43,10 @@ export class SettingsController {
   @ApiResponse({ 
     status: 400, 
     description: 'Datos inválidos. Verifica los valores enviados.',
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'No tienes permisos. Solo administradores pueden actualizar la configuración.',
   })
   async updateSettings(@Body() dto: UpdateSettingsDto) {
     return this.settingsService.updateSettings(dto);

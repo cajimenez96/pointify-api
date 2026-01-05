@@ -43,4 +43,18 @@ export class ClientsService {
       { new: true },
     );
   }
+
+  async updateProfile(dni: string, data: { name: string; email: string; phone: string }) {
+    // Completa el perfil de un Shadow User (PENDING -> ACTIVE)
+    return this.clientModel.findOneAndUpdate(
+      { dni, status: 'PENDING' },
+      {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        status: 'ACTIVE',
+      },
+      { new: true },
+    );
+  }
 }

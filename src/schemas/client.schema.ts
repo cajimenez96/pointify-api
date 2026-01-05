@@ -8,7 +8,7 @@ export class Client {
   @Prop({ required: true, unique: true })
   dni: string;
 
-  @Prop({ required: true })
+  @Prop({ default: '' })
   name: string;
 
   @Prop({ default: '' })
@@ -16,6 +16,9 @@ export class Client {
 
   @Prop({ default: '' })
   email: string;
+
+  @Prop({ enum: ['PENDING', 'ACTIVE'], default: 'PENDING' })
+  status: string; // PENDING = Shadow User, ACTIVE = Registered
 
   @Prop({ default: 0 })
   currentPoints: number;

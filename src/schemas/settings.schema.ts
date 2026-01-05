@@ -26,6 +26,13 @@ export class Settings {
 
   @Prop({ default: true })
   isActive: boolean; // Si está activa la campaña (manual toggle por admin)
+
+  // --- WINNERS STOCK CONTROL ---
+  @Prop({ default: 0 })
+  maxWinners: number; // 0 = unlimited, >0 = stock limit
+
+  @Prop({ default: 0 })
+  currentWinners: number; // Counter of prizes awarded
 }
 
 export const SettingsSchema = SchemaFactory.createForClass(Settings);

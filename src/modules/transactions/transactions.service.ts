@@ -50,9 +50,10 @@ export class TransactionsService {
       // Esto permite agregar puntos sin bloquear la fila de caja
       client = await this.clientsService.createClient({
         dni,
-        name: `Cliente ${dni}`, // Nombre temporal (shadow)
+        name: '', // Nombre vacío para Shadow User
         phone: '',
         email: '',
+        status: 'PENDING', // Marcado como pendiente de registro
       });
     }
 
@@ -75,23 +76,66 @@ export class TransactionsService {
     // 6. Verificar si alcanzó la meta de puntos
     const rewardReached = updatedClient.currentPoints >= pointsTarget;
 
-    // 7. Si alcanzó la meta, RESETEAR puntos a 0 (redención automática)
+    // 7. Si alcanzó la meta, validar stock de ganadores
     if (rewardReached) {
+      // 7.1. Verificar si hay límite de ganadores configurado
+      if (settings.maxWinners > 0) {
+        // Hay límite de stock
+        if (settings.currentWinners >= settings.maxWinners) {
+          // Stock agotado - NO entregar premio
+          return {
+            success: true,
+            client: {
+              name: updatedClient.name || `Cliente ${updatedClient.dni}`,
+              dni: updatedClient.dni,
+              status: updatedClient.status,
+              currentPoints: updatedClient.currentPoints,
+              totalAccumulated: updatedClient.totalAccumulated,
+            },
+            rewardReached: false, // No se entrega premio
+            stockAvailable: false,
+            message: `Alcanzaste ${pointsTarget} puntos pero no hay premios disponibles. Total acumulado: ${updatedClient.totalAccumulated}`,
+          };
+        }
+        
+        // Hay stock disponible -> Incrementar contador de ganadores
+        await this.settingsModel.findOneAndUpdate(
+          { key: 'default' },
+          { $inc: { currentWinners: 1 } }
+        );
+      }
+
+      // 7.2. RESETEAR puntos a 0 (redención automática)
       await this.clientsService.redeemReward(dni);
+
+      return {
+        success: true,
+        client: {
+          name: updatedClient.name || `Cliente ${updatedClient.dni}`,
+          dni: updatedClient.dni,
+          status: updatedClient.status,
+          currentPoints: 0, // Mostrar 0 porque se reseteó
+          totalAccumulated: updatedClient.totalAccumulated,
+        },
+        rewardReached: true,
+        stockAvailable: true,
+        rewardName: settings.rewardName || 'Premio',
+        message: `🎉 ¡PREMIO GANADO! Entregar ${settings.rewardName} a ${updatedClient.name || 'Cliente'}`,
+      };
     }
 
+    // 8. No alcanzó la meta - respuesta normal
     return {
       success: true,
       client: {
-        name: updatedClient.name,
-        currentPoints: rewardReached ? 0 : updatedClient.currentPoints, // Mostrar 0 si ganó
+        name: updatedClient.name || `Cliente ${updatedClient.dni}`,
+        dni: updatedClient.dni,
+        status: updatedClient.status,
+        currentPoints: updatedClient.currentPoints,
         totalAccumulated: updatedClient.totalAccumulated,
       },
-      rewardReached,
-      rewardName: settings.rewardName || 'Premio',
-      message: rewardReached
-        ? `🎉 ¡PREMIO GANADO! Entregar ${settings.rewardName} a ${updatedClient.name}`
-        : 'Puntos agregados exitosamente',
+      rewardReached: false,
+      message: 'Puntos agregados exitosamente',
     };
   }
 }
