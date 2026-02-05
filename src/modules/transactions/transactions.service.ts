@@ -1,39 +1,58 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Transaction, TransactionDocument } from '../../schemas/transaction.schema';
+import {
+  Transaction,
+  TransactionDocument,
+} from '../../schemas/transaction.schema';
 import { Settings, SettingsDocument } from '../../schemas/settings.schema';
 import { ClientsService } from '../clients/clients.service';
 
 @Injectable()
 export class TransactionsService {
   constructor(
-    @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
+    @InjectModel(Transaction.name)
+    private transactionModel: Model<TransactionDocument>,
     @InjectModel(Settings.name) private settingsModel: Model<SettingsDocument>,
     private clientsService: ClientsService,
   ) {}
 
   async addPoints(dni: string, saleCode: string, cashierId: string) {
     // 1. Verificar código de venta duplicado PRIMERO (evita duplicados antes de validar cliente)
-    const existingTransaction = await this.transactionModel.findOne({ saleCode });
+    const existingTransaction = await this.transactionModel.findOne({
+      saleCode,
+    });
     if (existingTransaction) {
-      throw new BadRequestException('Código de venta ya procesado anteriormente');
+      throw new BadRequestException(
+        'Código de venta ya procesado anteriormente',
+      );
     }
 
     // 2. Obtener configuración actual y validar campaña
     const settings = await this.settingsModel.findOne({ key: 'default' });
     if (!settings) {
-      throw new BadRequestException('No hay configuración del sistema. Contacta al administrador.');
+      throw new BadRequestException(
+        'No hay configuración del sistema. Contacta al administrador.',
+      );
     }
 
     // 2.1. Validar si la campaña está activa manualmente
     if (!settings.isActive) {
-      throw new BadRequestException('La campaña no está activa. Contacta al administrador.');
+      throw new BadRequestException(
+        'La campaña no está activa. Contacta al administrador.',
+      );
     }
 
     // 2.2. Validar fechas de campaña (si están definidas)
     const now = new Date();
-    if (settings.campaignStartDate && now < new Date(settings.campaignStartDate)) {
+    if (
+      settings.campaignStartDate &&
+      now < new Date(settings.campaignStartDate)
+    ) {
       throw new BadRequestException('La campaña aún no ha comenzado.');
     }
     if (settings.campaignEndDate && now > new Date(settings.campaignEndDate)) {
@@ -44,7 +63,7 @@ export class TransactionsService {
 
     // 3. Buscar o crear cliente (SHADOW CLIENT LOGIC)
     let client = await this.clientsService.findByDni(dni);
-    
+
     if (!client) {
       // Cliente no existe -> Crear "Shadow Client" (sin nombre completo)
       // Esto permite agregar puntos sin bloquear la fila de caja
@@ -97,11 +116,11 @@ export class TransactionsService {
             message: `Alcanzaste ${pointsTarget} puntos pero no hay premios disponibles. Total acumulado: ${updatedClient.totalAccumulated}`,
           };
         }
-        
+
         // Hay stock disponible -> Incrementar contador de ganadores
         await this.settingsModel.findOneAndUpdate(
           { key: 'default' },
-          { $inc: { currentWinners: 1 } }
+          { $inc: { currentWinners: 1 } },
         );
       }
 

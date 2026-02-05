@@ -1,5 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { DashboardService } from './dashboard.service';
 import { DashboardStatsDto } from './dto/dashboard.dto';
@@ -15,18 +20,20 @@ export class DashboardController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener estadísticas del sistema',
-    description: 'Retorna métricas agregadas del sistema incluyendo total de clientes, transacciones, puntos emitidos y las transacciones recientes. Solo para administradores.',
+    description:
+      'Retorna métricas agregadas del sistema incluyendo total de clientes, transacciones, puntos emitidos y las transacciones recientes. Solo para administradores.',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Estadísticas retornadas exitosamente.',
     type: DashboardStatsDto,
   })
-  @ApiResponse({ 
-    status: 403, 
-    description: 'No tienes permisos. Solo administradores pueden ver las estadísticas.',
+  @ApiResponse({
+    status: 403,
+    description:
+      'No tienes permisos. Solo administradores pueden ver las estadísticas.',
   })
   async getStats() {
     return this.dashboardService.getStats();

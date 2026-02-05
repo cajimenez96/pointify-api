@@ -69,7 +69,8 @@ export class ClientResponseDto {
   email: string;
 
   @ApiProperty({
-    description: 'Estado del registro del cliente (PENDING = Shadow User, ACTIVE = Registrado)',
+    description:
+      'Estado del registro del cliente (PENDING = Shadow User, ACTIVE = Registrado)',
     example: 'ACTIVE',
     enum: ['PENDING', 'ACTIVE'],
   })

@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Transaction, TransactionSchema } from '../../schemas/transaction.schema';
+import {
+  Transaction,
+  TransactionSchema,
+} from '../../schemas/transaction.schema';
 import { Settings, SettingsSchema } from '../../schemas/settings.schema';
 import { ClientsModule } from '../clients/clients.module';
 import { TransactionsService } from './transactions.service';

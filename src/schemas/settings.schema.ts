@@ -1,12 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type SettingsDocument = Settings & Document;
 
+/**
+ * Schema de Configuración de Campaña
+ * Una configuración por empresa (companyId es unique)
+ */
 @Schema({ timestamps: true })
 export class Settings {
-  @Prop({ required: true, default: 'default' })
-  key: string; // Solo un documento con key="default"
+  @Prop({ type: Types.ObjectId, ref: 'Company', required: true, unique: true })
+  companyId: Types.ObjectId; // Una configuración por empresa
 
   @Prop({ required: true, default: 10 })
   pointsTarget: number; // Puntos necesarios para canjear premio
@@ -36,3 +40,6 @@ export class Settings {
 }
 
 export const SettingsSchema = SchemaFactory.createForClass(Settings);
+
+// Índice único: una configuración por empresa
+SettingsSchema.index({ companyId: 1 }, { unique: true });
