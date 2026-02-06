@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   NotFoundException,
   HttpCode,
   HttpStatus,
@@ -28,11 +29,13 @@ import { Roles } from '../../guards/roles.decorator';
 export class ClientsController {
   constructor(private clientsService: ClientsService) {}
 
+  // ========== PÚBLICO (SIN JWT) ==========
+
   @Get(':dni')
   @ApiOperation({
-    summary: 'Consultar cliente por DNI',
+    summary: 'Consultar cliente por DNI (Público - QR Code)',
     description:
-      'Endpoint público que permite consultar los puntos de un cliente usando su DNI. Se usa en el portal del cliente.',
+      'Endpoint público para QR codes. Permite consultar puntos del cliente y catálogo de premios disponibles usando DNI + companyCode.',
   })
   @ApiParam({
     name: 'dni',
@@ -42,22 +45,26 @@ export class ClientsController {
   @ApiResponse({
     status: 200,
     description:
-      'Cliente encontrado. Retorna información completa del cliente.',
-    type: ClientResponseDto,
+      'Cliente encontrado o estructura base si no existe. Incluye premios con flag canAfford.',
   })
   @ApiResponse({
     status: 404,
-    description: 'Cliente no encontrado en la base de datos.',
+    description: 'Empresa no encontrada con el companyCode proporcionado.',
   })
-  async getClientByDni(@Param('dni') dni: string) {
-    const client = await this.clientsService.findByDni(dni);
-    if (!client) {
+  async getClientByDni(
+    @Param('dni') dni: string,
+    @Query('companyCode') companyCode: string,
+  ) {
+    if (!companyCode) {
       throw new NotFoundException(
-        'Cliente no encontrado. Por favor, regístrate primero.',
+        'Parámetro companyCode es requerido en query string',
       );
     }
-    return client;
+
+    return this.clientsService.getClientWithRewards(dni, companyCode);
   }
+
+  // ========== PROTEGIDOS (CON JWT) ==========
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

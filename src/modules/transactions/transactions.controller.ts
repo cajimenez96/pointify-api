@@ -1,62 +1,65 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
   UseGuards,
   Request,
-  HttpCode,
-  HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiResponse,
-  ApiBody,
-} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { TransactionsService } from './transactions.service';
-import { AddPointsDto, AddPointsResponseDto } from './dto/transaction.dto';
+import { EarnPointsDto } from './dto/earn-points.dto';
+import { RedeemPointsDto } from './dto/redeem-points.dto';
+import { CompanyContextGuard } from '../../guards/company-context.guard';
+import { RolesGuard } from '../../guards/roles.guard';
+import { Roles } from '../../guards/roles.decorator';
 
-@ApiTags('Transacciones')
 @Controller('transactions')
+@UseGuards(AuthGuard('jwt'), CompanyContextGuard, RolesGuard)
 export class TransactionsController {
   constructor(private transactionsService: TransactionsService) {}
 
-  @Post('add')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Agregar puntos a un cliente',
-    description:
-      'Endpoint protegido que permite a cajeros y administradores agregar puntos a un cliente tras una compra. Requiere autenticación JWT. Valida que el código de venta sea único y detecta automáticamente si el cliente alcanzó la meta de puntos.',
-  })
-  @ApiBody({ type: AddPointsDto })
-  @ApiResponse({
-    status: 200,
-    description:
-      'Puntos agregados exitosamente. Retorna información actualizada del cliente y si alcanzó el premio.',
-    type: AddPointsResponseDto,
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado. Token JWT inválido o expirado.',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Cliente no encontrado. El cliente debe registrarse primero.',
-  })
-  @ApiResponse({
-    status: 400,
-    description:
-      'Código de venta duplicado. Este código ya fue procesado anteriormente.',
-  })
-  async addPoints(@Body() dto: AddPointsDto, @Request() req) {
-    return this.transactionsService.addPoints(
-      dto.dni,
-      dto.saleCode,
+  // ========== EARN (SUMAR PUNTOS) ==========
+
+  @Post('earn')
+  @Roles('admin', 'cashier')
+  async earnPoints(@Request() req, @Body() dto: EarnPointsDto) {
+    return this.transactionsService.earnPoints(
+      req.companyId,
+      dto,
       req.user.userId,
     );
+  }
+
+  // ========== REDEEM (CANJEAR PUNTOS) ==========
+
+  @Post('redeem')
+  @Roles('admin', 'cashier')
+  async redeemPoints(@Request() req, @Body() dto: RedeemPointsDto) {
+    return this.transactionsService.redeemPoints(
+      req.companyId,
+      dto,
+      req.user.userId,
+    );
+  }
+
+  // ========== HISTORIAL ==========
+
+  @Get()
+  @Roles('admin')
+  async findAll(
+    @Request() req,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Query('type') type?: 'EARN' | 'REDEEM',
+  ) {
+    return this.transactionsService.findAll(req.companyId, page, limit, type);
+  }
+
+  @Get('client/:dni')
+  @Roles('admin', 'cashier')
+  async findByClient(@Request() req, @Query('dni') dni: string) {
+    return this.transactionsService.findByClient(req.companyId, dni);
   }
 }

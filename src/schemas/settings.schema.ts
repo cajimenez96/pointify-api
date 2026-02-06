@@ -4,39 +4,93 @@ import { Document, Types } from 'mongoose';
 export type SettingsDocument = Settings & Document;
 
 /**
- * Schema de Configuración de Campaña
+ * Configuración de Puntos por Producto
+ */
+export class ProductPointsConfig {
+  @Prop({ required: true })
+  productName: string; // Ej: "Café Espresso", "Hamburguesa Classic"
+
+  @Prop({ required: true, min: 1 })
+  pointsValue: number; // Cuántos puntos otorga este producto
+
+  @Prop({ default: true })
+  isActive: boolean; // Si está activo para registrar puntos
+}
+
+/**
+ * Premio del Catálogo
+ */
+export class Reward {
+  @Prop({ required: true })
+  name: string; // Ej: "Café Gratis", "Taza Personalizada"
+
+  @Prop({ default: '' })
+  description: string; // Descripción del premio
+
+  @Prop({ required: true, min: 1 })
+  pointsCost: number; // Cuántos puntos cuesta canjear
+
+  @Prop({ type: Number, default: null })
+  stock: number | null; // null = infinito, 0 = agotado, N = disponibles
+
+  @Prop({ default: true })
+  isActive: boolean; // Si está disponible para canje
+
+  @Prop({ type: String, default: null })
+  imageUrl: string | null; // URL de imagen del premio (opcional)
+}
+
+/**
+ * Schema de Configuración de Campaña Multi-Tenant
  * Una configuración por empresa (companyId es unique)
+ *
+ * BREAKING CHANGE: Migrado de "meta única" a "economía de puntos"
+ * - Eliminado: rewardName, pointsTarget, minPurchaseAmount, maxWinners, currentWinners
+ * - Agregado: pointsConfig (productos), rewards (catálogo)
  */
 @Schema({ timestamps: true })
 export class Settings {
   @Prop({ type: Types.ObjectId, ref: 'Company', required: true, unique: true })
   companyId: Types.ObjectId; // Una configuración por empresa
 
-  @Prop({ required: true, default: 10 })
-  pointsTarget: number; // Puntos necesarios para canjear premio
+  // ========== CONFIGURACIÓN DE PUNTOS POR PRODUCTO ==========
+  @Prop({
+    type: [
+      {
+        productName: { type: String, required: true },
+        pointsValue: { type: Number, required: true, min: 1 },
+        isActive: { type: Boolean, default: true },
+      },
+    ],
+    default: [],
+  })
+  pointsConfig: ProductPointsConfig[]; // Productos y sus valores en puntos
 
-  @Prop({ required: true, default: 'Café Gratis' })
-  rewardName: string; // Nombre del premio
+  // ========== CATÁLOGO DE PREMIOS ==========
+  @Prop({
+    type: [
+      {
+        name: { type: String, required: true },
+        description: { type: String, default: '' },
+        pointsCost: { type: Number, required: true, min: 1 },
+        stock: { type: Number, default: null },
+        isActive: { type: Boolean, default: true },
+        imageUrl: { type: String, default: null },
+      },
+    ],
+    default: [],
+  })
+  rewards: Reward[]; // Catálogo de premios canjeables
 
-  @Prop({ default: 0 })
-  minPurchaseAmount: number; // Monto mínimo de compra (uso futuro)
-
-  // --- CAMPAIGN LOGIC ---
+  // ========== CONFIGURACIÓN DE CAMPAÑA ==========
   @Prop({ type: Date, default: null })
-  campaignStartDate: Date; // Fecha de inicio de la campaña (null = sin fecha)
+  campaignStartDate: Date | null; // Fecha de inicio (null = sin fecha)
 
   @Prop({ type: Date, default: null })
-  campaignEndDate: Date; // Fecha de fin de la campaña (null = sin fecha)
+  campaignEndDate: Date | null; // Fecha de fin (null = sin fecha)
 
   @Prop({ default: true })
-  isActive: boolean; // Si está activa la campaña (manual toggle por admin)
-
-  // --- WINNERS STOCK CONTROL ---
-  @Prop({ default: 0 })
-  maxWinners: number; // 0 = unlimited, >0 = stock limit
-
-  @Prop({ default: 0 })
-  currentWinners: number; // Counter of prizes awarded
+  isActive: boolean; // Toggle manual de campaña
 }
 
 export const SettingsSchema = SchemaFactory.createForClass(Settings);
