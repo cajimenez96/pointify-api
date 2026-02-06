@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -29,6 +30,21 @@ export class UsersService {
       throw new NotFoundException(
         `Empresa con ID "${dto.companyId}" no encontrada`,
       );
+    }
+
+    // Validar límite de usuarios (maxUsers)
+    // 0 = sin límite, cualquier otro número = límite específico
+    if (company.maxUsers > 0) {
+      const currentUserCount = await this.userModel.countDocuments({
+        companyId: dto.companyId,
+      });
+
+      if (currentUserCount >= company.maxUsers) {
+        throw new ForbiddenException(
+          `La empresa "${company.businessName}" ha alcanzado el límite máximo de ${company.maxUsers} usuarios. ` +
+            `Actualmente tiene ${currentUserCount} usuarios registrados.`,
+        );
+      }
     }
 
     // Validar unicidad de username dentro de la empresa
