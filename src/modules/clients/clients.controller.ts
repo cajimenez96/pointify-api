@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Query,
+  Request,
   NotFoundException,
   HttpCode,
   HttpStatus,
@@ -21,6 +22,8 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ClientsService } from './clients.service';
 import { CreateClientDto, ClientResponseDto } from './dto/client.dto';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
+import { CompanyContextGuard } from '../../guards/company-context.guard';
 import { RolesGuard } from '../../guards/roles.guard';
 import { Roles } from '../../guards/roles.decorator';
 
@@ -88,13 +91,13 @@ export class ClientsController {
   }
 
   @Get()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), CompanyContextGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Listar todos los clientes',
     description:
-      'Retorna la lista completa de clientes registrados. Solo para administradores.',
+      'Retorna la lista completa de clientes de la empresa. Solo para administradores.',
   })
   @ApiResponse({
     status: 200,
@@ -106,45 +109,28 @@ export class ClientsController {
     description:
       'No tienes permisos. Solo administradores pueden listar todos los clientes.',
   })
-  async listClients() {
-    return this.clientsService.findAll();
+  async listClients(@Request() req) {
+    return this.clientsService.findAll(req.companyId);
   }
 
   @Post('complete-profile')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Completar perfil de Shadow User',
+    summary: 'Completar perfil de Shadow User (Público)',
     description:
-      'Permite que un cliente con status PENDING complete su registro proporcionando su información personal.',
+      'Endpoint público que permite a un cliente con status PENDING completar su registro proporcionando su información personal y el código de empresa.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        dni: { type: 'string', example: '11223344' },
-        name: { type: 'string', example: 'Juan Pérez' },
-        email: { type: 'string', example: 'juan@example.com' },
-        phone: { type: 'string', example: '1234567890' },
-      },
-      required: ['dni', 'name', 'email', 'phone'],
-    },
-  })
+  @ApiBody({ type: CompleteProfileDto })
   @ApiResponse({
     status: 200,
     description: 'Perfil completado exitosamente. Status cambiado a ACTIVE.',
   })
   @ApiResponse({
     status: 404,
-    description: 'Cliente no encontrado o ya tiene perfil completo.',
+    description: 'Empresa o cliente no encontrado, o el cliente ya tiene perfil completo.',
   })
-  async completeProfile(
-    @Body() body: { dni: string; name: string; email: string; phone: string },
-  ) {
-    const client = await this.clientsService.updateProfile(body.dni, {
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-    });
+  async completeProfile(@Body() dto: CompleteProfileDto) {
+    const client = await this.clientsService.completeProfileByCompanyCode(dto);
 
     if (!client) {
       throw new NotFoundException(

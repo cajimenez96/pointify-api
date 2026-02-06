@@ -1,9 +1,15 @@
-import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from '../../schemas/client.schema';
 import { Company, CompanyDocument } from '../../schemas/company.schema';
 import { Settings, SettingsDocument } from '../../schemas/settings.schema';
+import { CreateClientDto } from './dto/client.dto';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
 
 @Injectable()
 export class ClientsService {
@@ -17,30 +23,91 @@ export class ClientsService {
     return this.clientModel.findOne({ dni, isActive: true });
   }
 
-  async createClient(data: any) {
-    // Validar límite de clientes si el data incluye companyId
-    if (data.companyId) {
-      const company = await this.companyModel.findById(data.companyId);
-      if (company && company.maxClients > 0) {
-        const currentClientCount = await this.clientModel.countDocuments({
-          companyId: data.companyId,
-        });
+  /**
+   * Crea un cliente nuevo usando companyCode (endpoint público)
+   */
+  async createClient(dto: CreateClientDto) {
+    // 1. Buscar empresa por código
+    const company = await this.companyModel.findOne({
+      companyCode: dto.companyCode,
+    });
+    if (!company) {
+      throw new NotFoundException(
+        `Empresa con código "${dto.companyCode}" no encontrada`,
+      );
+    }
 
-        if (currentClientCount >= company.maxClients) {
-          throw new ForbiddenException(
-            `La empresa "${company.businessName}" ha alcanzado el límite máximo de ${company.maxClients} clientes. ` +
-              `Actualmente tiene ${currentClientCount} clientes registrados.`,
-          );
-        }
+    // 2. Validar que la empresa esté activa
+    if (!company.isActive) {
+      throw new ForbiddenException('La empresa no está activa');
+    }
+
+    // 3. Validar límite de clientes
+    if (company.maxClients > 0) {
+      const currentClientCount = await this.clientModel.countDocuments({
+        companyId: company._id,
+      });
+
+      if (currentClientCount >= company.maxClients) {
+        throw new ForbiddenException(
+          `La empresa "${company.businessName}" ha alcanzado el límite máximo de ${company.maxClients} clientes.`,
+        );
       }
     }
 
-    const client = new this.clientModel(data);
+    // 4. Verificar que el DNI no exista en esta empresa
+    const existingClient = await this.clientModel.findOne({
+      companyId: company._id,
+      dni: dto.dni,
+    });
+    if (existingClient) {
+      throw new ForbiddenException(
+        `Ya existe un cliente con DNI "${dto.dni}" en esta empresa`,
+      );
+    }
+
+    // 5. Crear cliente
+    const client = new this.clientModel({
+      companyId: company._id,
+      dni: dto.dni,
+      name: dto.name,
+      phone: dto.phone || '',
+      email: dto.email || '',
+      status: 'ACTIVE',
+      currentPoints: 0,
+      totalAccumulated: 0,
+    });
+
     return client.save();
   }
 
-  async findAll() {
-    return this.clientModel.find({ isActive: true }).sort({ createdAt: -1 });
+  /**
+   * Crea un cliente interno (usado por transacciones - Shadow User)
+   */
+  async createClientInternal(companyId: string, data: Partial<Client>) {
+    const company = await this.companyModel.findById(companyId);
+    if (company && company.maxClients > 0) {
+      const currentClientCount = await this.clientModel.countDocuments({
+        companyId,
+      });
+
+      if (currentClientCount >= company.maxClients) {
+        throw new ForbiddenException(
+          `La empresa ha alcanzado el límite máximo de ${company.maxClients} clientes.`,
+        );
+      }
+    }
+
+    const client = new this.clientModel({ companyId, ...data });
+    return client.save();
+  }
+
+  async findAll(companyId?: string) {
+    const filter: any = { isActive: true };
+    if (companyId) {
+      filter.companyId = companyId;
+    }
+    return this.clientModel.find(filter).sort({ createdAt: -1 });
   }
 
   async incrementPoints(dni: string, points: number) {
@@ -76,6 +143,37 @@ export class ClientsService {
         name: data.name,
         email: data.email,
         phone: data.phone,
+        status: 'ACTIVE',
+      },
+      { new: true },
+    );
+  }
+
+  /**
+   * Completa el perfil de un Shadow User usando companyCode (endpoint público)
+   */
+  async completeProfileByCompanyCode(dto: CompleteProfileDto) {
+    // 1. Buscar empresa por código
+    const company = await this.companyModel.findOne({
+      companyCode: dto.companyCode,
+    });
+    if (!company) {
+      throw new NotFoundException(
+        `Empresa con código "${dto.companyCode}" no encontrada`,
+      );
+    }
+
+    // 2. Buscar y actualizar cliente PENDING en esa empresa
+    return this.clientModel.findOneAndUpdate(
+      {
+        companyId: company._id,
+        dni: dto.dni,
+        status: 'PENDING',
+      },
+      {
+        name: dto.name,
+        email: dto.email,
+        phone: dto.phone || '',
         status: 'ACTIVE',
       },
       { new: true },

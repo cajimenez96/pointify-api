@@ -31,6 +31,14 @@ export class SettingsController {
     return this.settingsService.getSettings(req.companyId);
   }
 
+  @Patch()
+  async updateCampaignSettings(
+    @Request() req,
+    @Body() dto: { isActive?: boolean; campaignStartDate?: string | null; campaignEndDate?: string | null },
+  ) {
+    return this.settingsService.updateCampaignSettings(req.companyId, dto);
+  }
+
   // ========== PRODUCTOS (CONFIGURACIÓN DE PUNTOS) ==========
 
   @Post('products')

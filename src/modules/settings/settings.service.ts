@@ -38,6 +38,26 @@ export class SettingsService {
     return this.findOrCreate(companyId);
   }
 
+  /**
+   * Actualizar configuración de campaña (isActive, fechas)
+   */
+  async updateCampaignSettings(
+    companyId: string,
+    dto: { isActive?: boolean; campaignStartDate?: string | null; campaignEndDate?: string | null },
+  ): Promise<SettingsDocument> {
+    const settings = await this.findOrCreate(companyId);
+
+    if (dto.isActive !== undefined) settings.isActive = dto.isActive;
+    if (dto.campaignStartDate !== undefined) {
+      settings.campaignStartDate = dto.campaignStartDate ? new Date(dto.campaignStartDate) : null;
+    }
+    if (dto.campaignEndDate !== undefined) {
+      settings.campaignEndDate = dto.campaignEndDate ? new Date(dto.campaignEndDate) : null;
+    }
+
+    return settings.save();
+  }
+
   // ========== PRODUCTOS (CONFIGURACIÓN DE PUNTOS) ==========
 
   /**
