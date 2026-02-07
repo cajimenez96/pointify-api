@@ -6,8 +6,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { User, UserDocument } from '../../schemas/user.schema';
+import { Model, Types } from 'mongoose';
+import { User, UserDocument, UserRole } from '../../schemas/user.schema';
 import { Company, CompanyDocument } from '../../schemas/company.schema';
 import { CreateUserBySuperAdminDto } from './dto/create-user-by-superadmin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -184,6 +184,7 @@ export class UsersService {
     const filter: any = {};
 
     if (companyId) {
+      // MongoDB can match ObjectId with string, so let's just use the string directly
       filter.companyId = companyId;
     }
 
