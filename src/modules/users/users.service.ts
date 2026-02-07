@@ -3,14 +3,17 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../../schemas/user.schema';
 import { Company, CompanyDocument } from '../../schemas/company.schema';
 import { CreateUserBySuperAdminDto } from './dto/create-user-by-superadmin.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { AuthService } from '../auth/auth.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -80,6 +83,96 @@ export class UsersService {
     );
 
     return user;
+  }
+
+  /**
+   * Actualizar usuario
+   * Puede ser usado por SuperAdmin o Admin de la misma empresa
+   */
+  async update(
+    userId: string,
+    dto: UpdateUserDto,
+    requestingUser: UserDocument,
+  ): Promise<UserDocument> {
+    // Buscar usuario a actualizar
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID "${userId}" no encontrado`);
+    }
+
+    // Validar permisos: SuperAdmin puede editar cualquier usuario
+    // Admin solo puede editar usuarios de su propia empresa
+    const isSuperAdmin = requestingUser.role === UserRole.SUPER_ADMIN;
+    const isSameCompany =
+      requestingUser.companyId?.toString() === user.companyId?.toString();
+
+    if (!isSuperAdmin && !isSameCompany) {
+      throw new ForbiddenException(
+        'No tienes permisos para editar este usuario',
+      );
+    }
+
+    // Si está actualizando username, validar unicidad dentro de la empresa
+    if (dto.username && dto.username !== user.username) {
+      const existingByUsername = await this.userModel.findOne({
+        companyId: user.companyId,
+        username: dto.username,
+        _id: { $ne: userId }, // Excluir el mismo usuario
+      });
+
+      if (existingByUsername) {
+        throw new ConflictException(
+          `El username "${dto.username}" ya está en uso en esta empresa`,
+        );
+      }
+    }
+
+    // Si está actualizando DNI, validar unicidad dentro de la empresa
+    if (dto.dni && dto.dni !== user.dni) {
+      const existingByDni = await this.userModel.findOne({
+        companyId: user.companyId,
+        dni: dto.dni,
+        _id: { $ne: userId }, // Excluir el mismo usuario
+      });
+
+      if (existingByDni) {
+        throw new ConflictException(
+          `El DNI "${dto.dni}" ya está registrado en esta empresa`,
+        );
+      }
+    }
+
+    // Construir objeto de actualización con tipos explícitos
+    const updateData: Partial<User> = {};
+
+    if (dto.username) updateData.username = dto.username;
+    if (dto.name) updateData.name = dto.name;
+    if (dto.dni) updateData.dni = dto.dni;
+    if (dto.role) updateData.role = dto.role;
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+
+    // Si se proporciona password, hashearlo
+    if (dto.password) {
+      updateData.password = await bcrypt.hash(dto.password, 10);
+    }
+
+    // Validar que hay algo para actualizar
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('No hay campos para actualizar');
+    }
+
+    // Actualizar usuario
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true, runValidators: true },
+    );
+
+    if (!updatedUser) {
+      throw new NotFoundException(`Usuario con ID "${userId}" no encontrado`);
+    }
+
+    return updatedUser;
   }
 
   /**
