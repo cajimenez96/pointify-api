@@ -30,7 +30,7 @@ export class DashboardService {
     const recentTransactions = await this.transactionModel
       .find()
       .populate('clientId', 'name dni')
-      .populate('cashierId', 'name')
+      .populate('userId', 'name')
       .sort({ createdAt: -1 })
       .limit(10);
 
