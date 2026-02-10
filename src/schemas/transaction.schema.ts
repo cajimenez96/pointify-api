@@ -49,7 +49,7 @@ export class Transaction {
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 
 // Índices para multi-tenancy y performance
-TransactionSchema.index({ companyId: 1, saleCode: 1 }, { unique: true, sparse: true }); // saleCode único por empresa (solo EARN)
+TransactionSchema.index({ companyId: 1, saleCode: 1 }, { unique: true, partialFilterExpression: { saleCode: { $type: 'string' } } }); // saleCode único por empresa (solo EARN)
 TransactionSchema.index({ companyId: 1, type: 1, createdAt: -1 }); // Listado por tipo
 TransactionSchema.index({ companyId: 1, dni: 1, createdAt: -1 }); // Historial del cliente
 TransactionSchema.index({ companyId: 1, createdAt: -1 }); // Listado general
