@@ -163,21 +163,25 @@ export class ClientsService {
       );
     }
 
-    // 2. Buscar y actualizar cliente PENDING en esa empresa
-    return this.clientModel.findOneAndUpdate(
-      {
-        companyId: company._id,
-        dni: dto.dni,
-        status: 'PENDING',
-      },
-      {
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone || '',
-        status: 'ACTIVE',
-      },
-      { new: true },
+    // 2. Buscar cliente por DNI y filtrar manualmente (Robustez ante índices corruptos)
+    const clients = await this.clientModel.find({ dni: dto.dni });
+    const client = clients.find(
+      (c) =>
+        c.companyId.toString() === company._id.toString() &&
+        c.status === 'PENDING',
     );
+
+    if (!client) {
+      // Retorna null para que el controlador lance 404
+      return null;
+    }
+
+    client.name = dto.name;
+    client.email = dto.email;
+    client.phone = dto.phone || '';
+    client.status = 'ACTIVE';
+
+    return client.save();
   }
 
   /**
@@ -191,10 +195,11 @@ export class ClientsService {
     }
 
     // 2. Buscar cliente
-    const client = await this.clientModel.findOne({
-      companyId: company._id,
-      dni,
-    });
+    // 2. Buscar cliente por DNI y filtrar manualmente
+    const clients = await this.clientModel.find({ dni });
+    const client = clients.find(
+      (c) => c.companyId.toString() === company._id.toString(),
+    );
 
     // 3. Obtener premios activos de la empresa
     const settings = await this.settingsModel.findOne({
