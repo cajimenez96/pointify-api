@@ -185,7 +185,7 @@ export class UsersService {
 
     if (companyId) {
       // MongoDB can match ObjectId with string, so let's just use the string directly
-      filter.companyId = companyId;
+      filter.companyId = new Types.ObjectId(companyId);
     }
 
     if (username) {

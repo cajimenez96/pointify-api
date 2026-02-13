@@ -7,7 +7,7 @@ import { Model } from 'mongoose';
 
 async function bootstrap() {
   console.log('🌱 Iniciando Seed de Super Admin...');
-  
+
   try {
     const app = await NestFactory.createApplicationContext(AppModule);
     const userModel = app.get<Model<User>>(getModelToken(User.name));
@@ -23,24 +23,22 @@ async function bootstrap() {
     };
 
     // Verificar si ya existe
-    const existingAdmin = await userModel.findOne({ 
+    const existingAdmin = await userModel.findOne({
       username: superAdminData.username,
-      companyId: null 
+      companyId: null,
     });
 
     if (existingAdmin) {
       console.log('⚠️  El Super Admin ya existe.');
-      
+
       // Opcional: Resetear password si se desea forzar
       const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
       existingAdmin.password = hashedPassword;
       await existingAdmin.save();
       console.log('🔄 Contraseña reseteada a:', superAdminData.password);
-      
     } else {
       // Crear nuevo Super Admin
       const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
-      
       await userModel.create({
         ...superAdminData,
         password: hashedPassword,
@@ -55,7 +53,6 @@ async function bootstrap() {
 
     await app.close();
     process.exit(0);
-
   } catch (error) {
     console.error('❌ Error durante el seeding:', error);
     process.exit(1);

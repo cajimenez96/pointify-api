@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User, UserDocument, UserRole } from '../../schemas/user.schema';
@@ -85,11 +85,13 @@ export class AuthService {
     }
 
     // 3. Buscar usuario dentro de esa empresa
-    const user = await this.userModel.findOne({
+    const query = {
       companyId: company._id,
       username,
       isActive: true,
-    });
+    };
+
+    const user = await this.userModel.findOne(query);
 
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
@@ -142,8 +144,9 @@ export class AuthService {
       name,
       dni,
       role,
-      companyId: companyId || null,
+      companyId: companyId ? new Types.ObjectId(companyId) : null,
     });
-    return user.save();
+    const saved = await user.save();
+    return saved;
   }
 }
