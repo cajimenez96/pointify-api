@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request as Req } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -10,6 +10,7 @@ import { DashboardService } from './dashboard.service';
 import { DashboardStatsDto } from './dto/dashboard.dto';
 import { RolesGuard } from '../../guards/roles.guard';
 import { Roles } from '../../guards/roles.decorator';
+import { CompanyContextGuard } from '../../guards/company-context.guard';
 
 @ApiTags('Panel de Control')
 @Controller('dashboard')
@@ -17,7 +18,7 @@ export class DashboardController {
   constructor(private dashboardService: DashboardService) {}
 
   @Get('stats')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), CompanyContextGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({
@@ -35,7 +36,7 @@ export class DashboardController {
     description:
       'No tienes permisos. Solo administradores pueden ver las estadísticas.',
   })
-  async getStats() {
-    return this.dashboardService.getStats();
+  async getStats(@Req() req) {
+    return this.dashboardService.getStats(req.companyId);
   }
 }
