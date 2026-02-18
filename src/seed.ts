@@ -1,39 +1,62 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { AuthService } from './modules/auth/auth.service';
-import { UserRole } from './schemas/user.schema';
+import { UserRole, User } from './schemas/user.schema';
+import * as bcrypt from 'bcrypt';
+import { getModelToken } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
-async function seed() {
-  const app = await NestFactory.createApplicationContext(AppModule);
-  const authService = app.get(AuthService);
+async function bootstrap() {
+  console.log('🌱 Iniciando Seed de Super Admin...');
 
   try {
-    // Create admin user
-    await authService.createUser(
-      '12345678',
-      'admin123',
-      'Admin User',
-      UserRole.ADMIN,
-    );
-    console.log('✅ Admin user created successfully!');
-    console.log('   DNI: 12345678');
-    console.log('   Password: admin123');
+    const app = await NestFactory.createApplicationContext(AppModule);
+    const userModel = app.get<Model<User>>(getModelToken(User.name));
 
-    // Create cashier user
-    await authService.createUser(
-      '87654321',
-      'cashier123',
-      'Cashier User',
-      UserRole.CASHIER,
-    );
-    console.log('✅ Cashier user created successfully!');
-    console.log('   DNI: 87654321');
-    console.log('   Password: cashier123');
-  } catch (error: any) {
-    console.error('❌ Error seeding users:', error.message);
+    const superAdminData = {
+      username: 'superadmin',
+      password: 'admin123', // Contraseña por defecto
+      role: UserRole.SUPER_ADMIN, // 'superadmin'
+      name: 'Sistema Super Admin',
+      dni: '00000000', // DNI ficticio para sistema
+      companyId: null, // Importante: null define al Super Admin global
+      isActive: true,
+    };
+
+    // Verificar si ya existe
+    const existingAdmin = await userModel.findOne({
+      username: superAdminData.username,
+      companyId: null,
+    });
+
+    if (existingAdmin) {
+      console.log('⚠️  El Super Admin ya existe.');
+
+      // Opcional: Resetear password si se desea forzar
+      const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
+      existingAdmin.password = hashedPassword;
+      await existingAdmin.save();
+      console.log('🔄 Contraseña reseteada a:', superAdminData.password);
+    } else {
+      // Crear nuevo Super Admin
+      const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
+      await userModel.create({
+        ...superAdminData,
+        password: hashedPassword,
+      });
+
+      console.log('✅ Super Admin creado exitosamente.');
+      console.log('-----------------------------------');
+      console.log('👤 Usuario:', superAdminData.username);
+      console.log('🔑 Password:', superAdminData.password);
+      console.log('-----------------------------------');
+    }
+
+    await app.close();
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error durante el seeding:', error);
+    process.exit(1);
   }
-
-  await app.close();
 }
 
-seed();
+bootstrap();

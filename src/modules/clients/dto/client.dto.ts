@@ -3,6 +3,14 @@ import { IsNotEmpty, IsString, IsEmail, IsOptional } from 'class-validator';
 
 export class CreateClientDto {
   @ApiProperty({
+    description: 'Código de la empresa donde se registra el cliente',
+    example: 'CAFE-2026',
+  })
+  @IsNotEmpty({ message: 'El código de empresa es obligatorio' })
+  @IsString()
+  companyCode: string;
+
+  @ApiProperty({
     description: 'DNI del cliente (documento de identidad)',
     example: '11223344',
   })
@@ -69,7 +77,8 @@ export class ClientResponseDto {
   email: string;
 
   @ApiProperty({
-    description: 'Estado del registro del cliente (PENDING = Shadow User, ACTIVE = Registrado)',
+    description:
+      'Estado del registro del cliente (PENDING = Shadow User, ACTIVE = Registrado)',
     example: 'ACTIVE',
     enum: ['PENDING', 'ACTIVE'],
   })
