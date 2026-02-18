@@ -170,7 +170,6 @@ export class ClientsService {
         c.companyId.toString() === company._id.toString() &&
         c.status === 'PENDING',
     );
-
     if (!client) {
       // Retorna null para que el controlador lance 404
       return null;
@@ -203,7 +202,8 @@ export class ClientsService {
 
     // 3. Obtener premios activos de la empresa
     const settings = await this.settingsModel.findOne({
-      companyId: company._id,
+      $or: [{ companyId: company._id }, { companyId: company._id.toString() }],
+      // TODO: eliminar el to string() ya que mas adelante se buscara por object id
     });
 
     const activeRewards = settings
