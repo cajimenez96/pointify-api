@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Company, CompanyDocument } from '../schemas/company.schema';
 import { UserRole } from '../schemas/user.schema';
 import { PaymentRequiredException } from './payment-required.exception';
@@ -77,10 +77,10 @@ export class CompanyContextGuard implements CanActivate {
       }
     }
 
-    // Inyectar companyId y companyCode en el request para usar en servicios
-    request.companyId = user.companyId;
+    // Inyectar companyId como ObjectId en el request para usar en servicios
+    request.companyId = new Types.ObjectId(user.companyId); // 👈 CONVERTIR A OBJECTID
     request.companyCode = user.companyCode; // Del JWT
-    request.company = company; // Opcionalmente inyectar el objeto completo
+    request.company = company; // Opcionalmente inyectar el objeto completo// Opcionalmente inyectar el objeto completo
 
     return true;
   }
