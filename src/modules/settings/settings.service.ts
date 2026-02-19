@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Settings, SettingsDocument } from '../../schemas/settings.schema';
 import { CreateProductPointsDto } from './dto/create-product-points.dto';
 import { CreateRewardDto } from './dto/create-reward.dto';
@@ -15,9 +20,9 @@ export class SettingsService {
   /**
    * Obtener configuración de la empresa o crearla si no existe
    */
-  async findOrCreate(companyId: string): Promise<SettingsDocument> {
+  async findOrCreate(companyId: Types.ObjectId): Promise<SettingsDocument> {
     let settings = await this.settingsModel.findOne({ companyId });
-    
+
     if (!settings) {
       settings = new this.settingsModel({
         companyId,
@@ -27,14 +32,14 @@ export class SettingsService {
       });
       await settings.save();
     }
-    
+
     return settings;
   }
 
   /**
    * Obtener configuración de la empresa
    */
-  async getSettings(companyId: string): Promise<SettingsDocument> {
+  async getSettings(companyId: Types.ObjectId): Promise<SettingsDocument> {
     return this.findOrCreate(companyId);
   }
 
@@ -42,17 +47,25 @@ export class SettingsService {
    * Actualizar configuración de campaña (isActive, fechas)
    */
   async updateCampaignSettings(
-    companyId: string,
-    dto: { isActive?: boolean; campaignStartDate?: string | null; campaignEndDate?: string | null },
+    companyId: Types.ObjectId,
+    dto: {
+      isActive?: boolean;
+      campaignStartDate?: string | null;
+      campaignEndDate?: string | null;
+    },
   ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
 
     if (dto.isActive !== undefined) settings.isActive = dto.isActive;
     if (dto.campaignStartDate !== undefined) {
-      settings.campaignStartDate = dto.campaignStartDate ? new Date(dto.campaignStartDate) : null;
+      settings.campaignStartDate = dto.campaignStartDate
+        ? new Date(dto.campaignStartDate)
+        : null;
     }
     if (dto.campaignEndDate !== undefined) {
-      settings.campaignEndDate = dto.campaignEndDate ? new Date(dto.campaignEndDate) : null;
+      settings.campaignEndDate = dto.campaignEndDate
+        ? new Date(dto.campaignEndDate)
+        : null;
     }
 
     return settings.save();
@@ -63,7 +76,10 @@ export class SettingsService {
   /**
    * Agregar producto con su configuración de puntos
    */
-  async addProductPoints(companyId: string, dto: CreateProductPointsDto): Promise<SettingsDocument> {
+  async addProductPoints(
+    companyId: Types.ObjectId,
+    dto: CreateProductPointsDto,
+  ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
 
     // Validar que no exista ya un producto con ese nombre
@@ -89,7 +105,7 @@ export class SettingsService {
    * Actualizar puntos de un producto existente
    */
   async updateProductPoints(
-    companyId: string,
+    companyId: Types.ObjectId,
     productName: string,
     pointsValue: number,
   ): Promise<SettingsDocument> {
@@ -99,9 +115,7 @@ export class SettingsService {
       (p) => p.productName === productName,
     );
     if (!product) {
-      throw new NotFoundException(
-        `Producto "${productName}" no encontrado`,
-      );
+      throw new NotFoundException(`Producto "${productName}" no encontrado`);
     }
 
     product.pointsValue = pointsValue;
@@ -112,7 +126,7 @@ export class SettingsService {
    * Desactivar producto (soft delete)
    */
   async removeProductPoints(
-    companyId: string,
+    companyId: Types.ObjectId,
     productName: string,
   ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
@@ -121,9 +135,7 @@ export class SettingsService {
       (p) => p.productName === productName,
     );
     if (productIndex === -1) {
-      throw new NotFoundException(
-        `Producto "${productName}" no encontrado`,
-      );
+      throw new NotFoundException(`Producto "${productName}" no encontrado`);
     }
 
     // Eliminar el producto del array
@@ -134,7 +146,7 @@ export class SettingsService {
   /**
    * Listar productos activos
    */
-  async getActiveProducts(companyId: string) {
+  async getActiveProducts(companyId: Types.ObjectId) {
     const settings = await this.findOrCreate(companyId);
     return settings.pointsConfig.filter((p) => p.isActive);
   }
@@ -144,7 +156,10 @@ export class SettingsService {
   /**
    * Agregar premio al catálogo
    */
-  async addReward(companyId: string, dto: CreateRewardDto): Promise<SettingsDocument> {
+  async addReward(
+    companyId: Types.ObjectId,
+    dto: CreateRewardDto,
+  ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
 
     settings.rewards.push({
@@ -163,13 +178,15 @@ export class SettingsService {
    * Actualizar premio existente
    */
   async updateReward(
-    companyId: string,
+    companyId: Types.ObjectId,
     rewardId: string,
     dto: UpdateRewardDto,
   ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
 
-    const reward = settings.rewards.find((r: any) => r._id.toString() === rewardId);
+    const reward = settings.rewards.find(
+      (r: any) => r._id.toString() === rewardId,
+    );
     if (!reward) {
       throw new NotFoundException('Premio no encontrado');
     }
@@ -188,10 +205,15 @@ export class SettingsService {
   /**
    * Eliminar premio (soft delete)
    */
-  async deleteReward(companyId: string, rewardId: string): Promise<SettingsDocument> {
+  async deleteReward(
+    companyId: Types.ObjectId,
+    rewardId: string,
+  ): Promise<SettingsDocument> {
     const settings = await this.findOrCreate(companyId);
 
-    const reward = settings.rewards.find((r: any) => r._id.toString() === rewardId);
+    const reward = settings.rewards.find(
+      (r: any) => r._id.toString() === rewardId,
+    );
     if (!reward) {
       throw new NotFoundException('Premio no encontrado');
     }
@@ -203,7 +225,7 @@ export class SettingsService {
   /**
    * Listar premios activos y con stock disponible
    */
-  async getActiveRewards(companyId: string) {
+  async getActiveRewards(companyId: Types.ObjectId) {
     const settings = await this.findOrCreate(companyId);
     return settings.rewards.filter(
       (r) => r.isActive && (r.stock === null || r.stock > 0),
@@ -213,7 +235,7 @@ export class SettingsService {
   /**
    * Listar todos los premios (incluyendo inactivos)
    */
-  async getAllRewards(companyId: string) {
+  async getAllRewards(companyId: Types.ObjectId) {
     const settings = await this.findOrCreate(companyId);
     return settings.rewards;
   }
@@ -221,14 +243,16 @@ export class SettingsService {
   /**
    * Obtener premio por ID (para validación en transacciones)
    */
-  async getRewardById(companyId: string, rewardId: string) {
+  async getRewardById(companyId: Types.ObjectId, rewardId: string) {
     const settings = await this.findOrCreate(companyId);
-    const reward = settings.rewards.find((r: any) => r._id.toString() === rewardId);
-    
+    const reward = settings.rewards.find(
+      (r: any) => r._id.toString() === rewardId,
+    );
+
     if (!reward) {
       throw new NotFoundException('Premio no encontrado');
     }
-    
+
     return reward;
   }
 }
