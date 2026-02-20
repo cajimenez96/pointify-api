@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Company, CompanyDocument } from '../schemas/company.schema';
 import { UserRole } from '../schemas/user.schema';
 import { PaymentRequiredException } from './payment-required.exception';
@@ -48,8 +48,17 @@ export class CompanyContextGuard implements CanActivate {
       throw new ForbiddenException('No se encontró contexto de empresa');
     }
 
+    // Validar que companyId sea un ObjectId válido
+    if (!Types.ObjectId.isValid(user.companyId)) {
+      throw new ForbiddenException(
+        'ID de empresa inválido en el token de autenticación',
+      );
+    }
+    // Convertir a ObjectId
+    const companyObjectId = new Types.ObjectId(user.companyId);
+
     // Buscar la empresa en la base de datos
-    const company = await this.companyModel.findById(user.companyId);
+    const company = await this.companyModel.findById(companyObjectId);
 
     if (!company) {
       throw new ForbiddenException('Empresa no encontrada');
@@ -77,10 +86,10 @@ export class CompanyContextGuard implements CanActivate {
       }
     }
 
-    // Inyectar companyId y companyCode en el request para usar en servicios
-    request.companyId = user.companyId;
+    // Inyectar companyId como ObjectId en el request para usar en servicios
+    request.companyId = companyObjectId; // Ya es ObjectId validado
     request.companyCode = user.companyCode; // Del JWT
-    request.company = company; // Opcionalmente inyectar el objeto completo
+    request.company = company; // Opcionalmente inyectar el objeto completo// Opcionalmente inyectar el objeto completo
 
     return true;
   }
