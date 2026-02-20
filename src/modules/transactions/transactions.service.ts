@@ -5,7 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
   Transaction,
   TransactionDocument,
@@ -29,7 +29,11 @@ export class TransactionsService {
   /**
    * Sumar puntos por compra de producto
    */
-  async earnPoints(companyId: string, dto: EarnPointsDto, userId: string) {
+  async earnPoints(
+    companyId: Types.ObjectId,
+    dto: EarnPointsDto,
+    userId: string,
+  ) {
     // 1. Validar código de venta único por empresa
     const existingTx = await this.transactionModel.findOne({
       companyId,
@@ -124,7 +128,11 @@ export class TransactionsService {
   /**
    * Canjear puntos por premio
    */
-  async redeemPoints(companyId: string, dto: RedeemPointsDto, userId: string) {
+  async redeemPoints(
+    companyId: Types.ObjectId,
+    dto: RedeemPointsDto,
+    userId: string,
+  ) {
     // 1. Buscar cliente
     const client = await this.clientModel.findOne({ companyId, dni: dto.dni });
     if (!client) {
@@ -228,7 +236,7 @@ export class TransactionsService {
    * Obtener historial de transacciones de la empresa
    */
   async findAll(
-    companyId: string,
+    companyId: Types.ObjectId,
     page = 1,
     limit = 20,
     type?: 'EARN' | 'REDEEM',
@@ -266,7 +274,7 @@ export class TransactionsService {
   /**
    * Obtener historial de un cliente específico
    */
-  async findByClient(companyId: string, dni: string) {
+  async findByClient(companyId: Types.ObjectId, dni: string) {
     return this.transactionModel
       .find({ companyId, dni })
       .populate('userId', 'username name')
