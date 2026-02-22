@@ -27,31 +27,31 @@ export class ClientCompaniesService {
     companyId: Types.ObjectId,
     dto: CreateClientCompanyDto,
   ): Promise<ClientCompanyDocument> {
-    const clientObjectId = new Types.ObjectId(dto.clientId);
+    try {
+      const clientObjectId = new Types.ObjectId(dto.clientId);
 
-    // Verificar si ya existe la relación
-    const existing = await this.clientCompanyModel.findOne({
-      clientId: clientObjectId,
-      companyId,
-    });
+      // Crear directamente - el índice único protege contra duplicados
+      const relation = await this.clientCompanyModel.create({
+        clientId: clientObjectId,
+        companyId,
+        currentPoints: 0,
+        totalAccumulated: 0,
+        status: 'PENDING',
+        isActive: true,
+      });
 
-    if (existing) {
-      throw new ConflictException(
-        'La relación entre este cliente y empresa ya existe',
-      );
+      return relation;
+    } catch (error) {
+      // MongoDB error E11000 = violación de índice único
+      if (error.code === 11000) {
+        throw new ConflictException(
+          'La relación entre este cliente y empresa ya existe',
+        );
+      }
+
+      // Cualquier otro error, relanzar
+      throw error;
     }
-
-    // Crear nueva relación
-    const relation = await this.clientCompanyModel.create({
-      clientId: clientObjectId,
-      companyId,
-      currentPoints: 0,
-      totalAccumulated: 0,
-      status: 'PENDING',
-      isActive: true,
-    });
-
-    return relation;
   }
 
   /**
