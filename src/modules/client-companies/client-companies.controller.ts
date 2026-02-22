@@ -31,7 +31,7 @@ export class ClientCompaniesController {
    * Crear una nueva relación cliente-empresa
    */
   @Post()
-  @Roles('admin')
+  @Roles('admin', 'cashier')
   create(@Req() req, @Body() dto: CreateClientCompanyDto) {
     return this.clientCompaniesService.create(req.companyId, dto);
   }
