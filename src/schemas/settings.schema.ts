@@ -50,7 +50,7 @@ export class Reward {
  */
 @Schema({ timestamps: true })
 export class Settings {
-  @Prop({ type: Types.ObjectId, ref: 'Company', required: true, unique: true })
+  @Prop({ type: Types.ObjectId, ref: 'Company', required: true })
   companyId: Types.ObjectId; // Una configuración por empresa
 
   // ========== CONFIGURACIÓN DE PUNTOS POR PRODUCTO ==========

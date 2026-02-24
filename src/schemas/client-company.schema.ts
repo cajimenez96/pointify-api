@@ -24,12 +24,6 @@ export class ClientCompany {
 
   @Prop({ default: 0, min: 0 })
   totalAccumulated: number; // Total histórico de puntos acumulados
-
-  @Prop({ enum: ['PENDING', 'ACTIVE'], default: 'PENDING' })
-  status: string; // Estado del cliente en esta empresa
-
-  @Prop({ default: true })
-  isActive: boolean; // Si la relación está activa
 }
 
 export const ClientCompanySchema = SchemaFactory.createForClass(ClientCompany);
@@ -39,8 +33,5 @@ export const ClientCompanySchema = SchemaFactory.createForClass(ClientCompany);
 ClientCompanySchema.index({ clientId: 1, companyId: 1 }, { unique: true });
 
 // Índices para consultas frecuentes
-ClientCompanySchema.index({ companyId: 1, isActive: 1 }); // Clientes activos por empresa
-ClientCompanySchema.index({ companyId: 1, status: 1 }); // Filtrar por status en empresa
-ClientCompanySchema.index({ clientId: 1, isActive: 1 }); // Empresas activas de un cliente
 ClientCompanySchema.index({ companyId: 1, currentPoints: -1 }); // Top clientes por puntos
 ClientCompanySchema.index({ companyId: 1, totalAccumulated: -1 }); // Top clientes históricos
