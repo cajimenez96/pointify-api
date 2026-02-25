@@ -15,6 +15,8 @@ import { Client, ClientDocument } from '../../schemas/client.schema';
 import { EarnPointsDto } from './dto/earn-points.dto';
 import { RedeemPointsDto } from './dto/redeem-points.dto';
 
+import { ClientCompaniesService } from '../client-companies/client-companies.service';
+
 @Injectable()
 export class TransactionsService {
   constructor(
@@ -22,6 +24,7 @@ export class TransactionsService {
     private transactionModel: Model<TransactionDocument>,
     @InjectModel(Settings.name) private settingsModel: Model<SettingsDocument>,
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
+    private clientCompaniesService: ClientCompaniesService, // 👈 AGREGAR
   ) {}
 
   // ========== EARN (SUMAR PUNTOS) ==========
@@ -34,27 +37,20 @@ export class TransactionsService {
     dto: EarnPointsDto,
     userId: string,
   ) {
-    // 1. Validar código de venta único por empresa
-    const existingTx = await this.transactionModel.findOne({
-      companyId,
-      saleCode: dto.saleCode,
+    // 1. Obtener configuración de la empresa
+    const settings = await this.settingsModel.findOne({
+      $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
     });
-    if (existingTx) {
-      throw new ConflictException('Código de venta ya registrado');
-    }
-
-    // 2. Obtener configuración de la empresa
-    const settings = await this.settingsModel.findOne({ companyId });
     if (!settings) {
       throw new NotFoundException('Configuración no encontrada');
     }
 
-    // 2.1 Validar campaña activa
+    // 1.1 Validar campaña activa
     if (!settings.isActive) {
       throw new BadRequestException('Campaña inactiva');
     }
 
-    // 2.2 Validar fechas de campaña
+    // 1.2 Validar fechas de campaña
     const now = new Date();
     if (settings.campaignStartDate && now < settings.campaignStartDate) {
       throw new BadRequestException('La campaña aún no ha comenzado');
@@ -63,7 +59,7 @@ export class TransactionsService {
       throw new BadRequestException('La campaña ha finalizado');
     }
 
-    // 3. Buscar configuración del producto
+    // 2. Buscar configuración del producto
     const productConfig = settings.pointsConfig.find(
       (p) => p.productName === dto.productName && p.isActive,
     );
@@ -74,29 +70,19 @@ export class TransactionsService {
     }
 
     const pointsToAdd = productConfig.pointsValue;
-
-    // 4. Buscar o crear cliente (Shadow User)
-    let client = await this.clientModel.findOne({ companyId, dni: dto.dni });
+    // 3. Buscar o crear cliente (sin companyId)
+    let client = await this.clientModel.findOne({ dni: dto.dni });
     if (!client) {
       client = await this.clientModel.create({
-        companyId,
         dni: dto.dni,
         name: `Cliente ${dto.dni}`,
         phone: '',
         email: '',
         status: 'PENDING',
-        currentPoints: 0,
-        totalAccumulated: 0,
-        isActive: true,
       });
     }
 
-    // 5. SUMAR puntos al cliente
-    client.currentPoints += pointsToAdd;
-    client.totalAccumulated += pointsToAdd;
-    await client.save();
-
-    // 6. Crear transacción EARN
+    // 5. Crear transacción EARN
     const transaction = await this.transactionModel.create({
       companyId,
       type: 'EARN',
@@ -108,6 +94,16 @@ export class TransactionsService {
       userId,
     });
 
+    if (!transaction) {
+      throw new ConflictException('Error al crear la transacción');
+    }
+    // 4. SUMAR puntos en ClientCompany (no en Client)
+    const relation = await this.clientCompaniesService.addPoints(
+      client._id,
+      companyId,
+      pointsToAdd,
+    );
+
     return {
       success: true,
       transaction,
@@ -115,8 +111,8 @@ export class TransactionsService {
         dni: client.dni,
         name: client.name,
         status: client.status,
-        currentPoints: client.currentPoints,
-        totalAccumulated: client.totalAccumulated,
+        currentPoints: relation.currentPoints,
+        totalAccumulated: relation.totalAccumulated,
       },
       pointsAdded: pointsToAdd,
       message: `+${pointsToAdd} puntos por ${dto.productName}`,
@@ -134,13 +130,15 @@ export class TransactionsService {
     userId: string,
   ) {
     // 1. Buscar cliente
-    const client = await this.clientModel.findOne({ companyId, dni: dto.dni });
+    const client = await this.clientModel.findOne({ dni: dto.dni });
     if (!client) {
       throw new NotFoundException('Cliente no encontrado');
     }
 
     // 2. Obtener configuración y premio
-    const settings = await this.settingsModel.findOne({ companyId });
+    const settings = await this.settingsModel.findOne({
+      $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
+    });
     if (!settings) {
       throw new NotFoundException('Configuración no encontrada');
     }
@@ -159,75 +157,78 @@ export class TransactionsService {
       );
     }
 
-    // 4. Validar saldo del cliente
-    if (client.currentPoints <= reward.pointsCost) {
+    // 4. Validar saldo del cliente en ClientCompany
+    const relation = await this.clientCompaniesService.findOrCreate(
+      client._id,
+      companyId,
+    );
+
+    if (relation.currentPoints < reward.pointsCost) {
       throw new BadRequestException(
-        `Saldo insuficiente. Necesita ${reward.pointsCost} puntos, tiene ${client.currentPoints}`,
+        `Saldo insuficiente. Necesita ${reward.pointsCost} puntos, tiene ${relation.currentPoints}`,
       );
     }
 
-    // 5. OPERACIÓN SECUENCIAL (Sin Transacción de Mongo para soporte Standalone)
-    // Nota: Idealmente usar transacciones, pero requiere Replica Set.
-    // Para desarrollo/producción simple, hacemos las operaciones en orden y si falla algo manual rollback (o simplemente fail).
+    // 5. Restar puntos
 
-    try {
-      // 5.1 Restar puntos del cliente
-      client.currentPoints -= reward.pointsCost;
-      await client.save();
+    await this.clientCompaniesService.deductPoints(
+      client._id,
+      companyId,
+      reward.pointsCost,
+    );
 
-      // 5.2 Restar stock del premio (si aplica)
-      if (reward.stock !== null) {
-        // Recargar settings para asegurar consistencia (opcional pero recomendado)
-        // Por simplicidad usamos la instancia actual, asumiendo que el stock check anterior fue válido.
-        // Mongoose pre-save hooks podrían ayudar aquí si hubiera alta concurrencia.
-        const settingsToUpdate = await this.settingsModel.findOne({
-          companyId,
-        });
-        if (settingsToUpdate) {
-          const rewardToUpdate = settingsToUpdate.rewards.find(
-            (r: any) => r._id.toString() === dto.rewardId,
-          );
-          if (rewardToUpdate && rewardToUpdate.stock !== null) {
-            rewardToUpdate.stock -= 1;
-            await settingsToUpdate.save();
-          }
-        }
-      }
-
-      // 5.3 Crear transacción REDEEM
-      const transaction = await this.transactionModel.create({
-        companyId,
-        type: 'REDEEM',
-        dni: dto.dni,
-        clientId: client._id,
-        points: reward.pointsCost,
-        rewardId: dto.rewardId,
-        rewardName: reward.name,
-        userId,
+    // 5.1 Restar stock del premio
+    if (reward.stock !== null) {
+      const settingsToUpdate = await this.settingsModel.findOne({
+        $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
       });
 
-      return {
-        success: true,
-        transaction,
-        client: {
-          dni: client.dni,
-          name: client.name,
-          status: client.status,
-          currentPoints: client.currentPoints,
-          totalAccumulated: client.totalAccumulated,
-        },
-        reward: {
-          name: reward.name,
-          pointsCost: reward.pointsCost,
-          stockRemaining: reward.stock !== null ? reward.stock - 1 : null,
-        },
-        message: `🎉 Premio "${reward.name}" canjeado exitosamente`,
-      };
-    } catch (error) {
-      // Si falla después de restar puntos, idealmente deberíamos devolverlos.
-      // Implementación básica por ahora.
-      throw error;
+      if (settingsToUpdate) {
+        const rewardToUpdate = settingsToUpdate.rewards.find(
+          (r: any) => r._id.toString() === dto.rewardId,
+        );
+        if (rewardToUpdate && rewardToUpdate.stock !== null) {
+          rewardToUpdate.stock -= 1;
+          await settingsToUpdate.save();
+        }
+      }
     }
+
+    // 5.2 Crear transacción REDEEM
+    const transaction = await this.transactionModel.create({
+      companyId,
+      type: 'REDEEM',
+      dni: dto.dni,
+      clientId: client._id,
+      points: reward.pointsCost,
+      rewardId: dto.rewardId,
+      rewardName: reward.name,
+      userId,
+    });
+
+    // Obtener puntos actualizados
+    const updatedRelation = await this.clientCompaniesService.getPoints(
+      client._id,
+      companyId,
+    );
+
+    return {
+      success: true,
+      transaction,
+      client: {
+        dni: client.dni,
+        name: client.name,
+        status: client.status,
+        currentPoints: updatedRelation.currentPoints,
+        totalAccumulated: updatedRelation.totalAccumulated,
+      },
+      reward: {
+        name: reward.name,
+        pointsCost: reward.pointsCost,
+        stockRemaining: reward.stock !== null ? reward.stock - 1 : null,
+      },
+      message: `🎉 Premio "${reward.name}" canjeado exitosamente`,
+    };
   }
 
   // ========== HISTORIAL ==========
