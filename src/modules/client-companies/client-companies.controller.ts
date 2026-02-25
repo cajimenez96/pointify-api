@@ -35,7 +35,7 @@ import { Roles } from '../../guards/roles.decorator';
 export class ClientCompaniesController {
   constructor(
     private readonly clientCompaniesService: ClientCompaniesService,
-  ) {}
+  ) { }
 
   @Post()
   @Roles('admin', 'cashier')
@@ -271,12 +271,8 @@ export class ClientCompaniesController {
     status: HttpStatus.FORBIDDEN,
     description: 'Solo administradores pueden actualizar relaciones',
   })
-  update(
-    @Req() req,
-    @Param('id') id: string,
-    @Body() dto: UpdateClientCompanyDto,
-  ) {
-    return this.clientCompaniesService.update(req.companyId, id, dto);
+  update(@Req() req, @Param('id') id: string,) {
+    return this.clientCompaniesService.update(req.companyId, id);
   }
 
   @Delete(':id')

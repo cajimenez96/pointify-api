@@ -7,12 +7,14 @@ import {
   ClientCompanySchema,
 } from '../../schemas/client-company.schema';
 import { Company, CompanySchema } from '../../schemas/company.schema';
+import { Client, ClientSchema } from '../../schemas/client.schema'; // 👈 AGREGAR
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: ClientCompany.name, schema: ClientCompanySchema },
       { name: Company.name, schema: CompanySchema }, // Para el guard
+      { name: Client.name, schema: ClientSchema },
     ]),
   ],
   controllers: [ClientCompaniesController],

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -9,6 +10,7 @@ import {
   ClientCompany,
   ClientCompanyDocument,
 } from '../../schemas/client-company.schema';
+import { Client, ClientDocument } from '../../schemas/client.schema';
 import { CreateClientCompanyDto } from './dto/create-client-company.dto';
 import { UpdateClientCompanyDto } from './dto/update-client-company.dto';
 import { QueryClientCompanyDto } from './dto/query-client-company.dto';
@@ -18,7 +20,9 @@ export class ClientCompaniesService {
   constructor(
     @InjectModel(ClientCompany.name)
     private clientCompanyModel: Model<ClientCompanyDocument>,
-  ) {}
+    @InjectModel(Client.name)
+    private clientModel: Model<ClientDocument>, // 👈 AGREGAR
+  ) { }
 
   /**
    * Crear una nueva relación Cliente-Empresa
@@ -36,8 +40,6 @@ export class ClientCompaniesService {
         companyId,
         currentPoints: 0,
         totalAccumulated: 0,
-        status: 'PENDING',
-        isActive: true,
       });
 
       return relation;
@@ -62,14 +64,6 @@ export class ClientCompaniesService {
     query: QueryClientCompanyDto,
   ): Promise<ClientCompanyDocument[]> {
     const filter: any = { companyId };
-
-    if (query.status) {
-      filter.status = query.status;
-    }
-
-    if (query.isActive !== undefined) {
-      filter.isActive = query.isActive;
-    }
 
     if (query.clientId) {
       filter.clientId = new Types.ObjectId(query.clientId);
@@ -127,23 +121,13 @@ export class ClientCompaniesService {
   }
 
   /**
-   * Actualizar una relación (status o isActive)
+   * Actualizar una relación (isActive)
    */
   async update(
     companyId: Types.ObjectId,
     id: string,
-    dto: UpdateClientCompanyDto,
   ): Promise<ClientCompanyDocument> {
     const relation = await this.findOne(companyId, id);
-
-    if (dto.status !== undefined) {
-      relation.status = dto.status;
-    }
-
-    if (dto.isActive !== undefined) {
-      relation.isActive = dto.isActive;
-    }
-
     return relation.save();
   }
 
@@ -155,7 +139,151 @@ export class ClientCompaniesService {
     id: string,
   ): Promise<ClientCompanyDocument> {
     const relation = await this.findOne(companyId, id);
-    relation.isActive = false;
     return relation.save();
+  }
+  /**
+   * ========================================
+   * MÉTODOS HELPER PARA OTROS SERVICIOS
+   * ========================================
+   */
+
+  /**
+   * Buscar o crear relación automáticamente
+   */
+  async findOrCreate(
+    clientId: Types.ObjectId,
+    companyId: Types.ObjectId,
+  ): Promise<ClientCompanyDocument> {
+    let relation = await this.clientCompanyModel.findOne({
+      clientId,
+      companyId,
+    });
+
+    if (!relation) {
+      try {
+        relation = await this.clientCompanyModel.create({
+          clientId,
+          companyId,
+          currentPoints: 0,
+          totalAccumulated: 0,
+        });
+      } catch (error) {
+        // Si hay race condition, intentar buscar de nuevo
+        if (error.code === 11000) {
+          relation = await this.clientCompanyModel.findOne({
+            clientId,
+            companyId,
+          });
+
+          // 👇 AGREGAR ESTA VALIDACIÓN
+          if (!relation) {
+            throw new ConflictException(
+              'Error al crear relación: conflicto de concurrencia',
+            );
+          }
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return relation; // ✅ Ahora TypeScript sabe que NUNCA es null
+  }
+  /**
+   * Sumar puntos a la relación
+   */
+  async addPoints(
+    clientId: Types.ObjectId,
+    companyId: Types.ObjectId,
+    points: number,
+  ): Promise<ClientCompanyDocument> {
+    const relation = await this.findOrCreate(clientId, companyId);
+    relation.currentPoints += points;
+    relation.totalAccumulated += points;
+    return relation.save();
+  }
+  /**
+   * Restar puntos de la relación
+   */
+  async deductPoints(
+    clientId: Types.ObjectId,
+    companyId: Types.ObjectId,
+    points: number,
+  ): Promise<ClientCompanyDocument> {
+    const relation = await this.clientCompanyModel.findOne({
+      clientId,
+      companyId,
+    });
+
+    if (!relation) {
+      throw new NotFoundException(
+        'No existe relación entre este cliente y la empresa',
+      );
+    }
+
+    if (relation.currentPoints < points) {
+      throw new BadRequestException(
+        `Puntos insuficientes. Disponibles: ${relation.currentPoints}, Requeridos: ${points}`,
+      );
+    }
+
+    relation.currentPoints -= points;
+    return relation.save();
+  }
+  /**
+   * Obtener puntos de un cliente en una empresa
+   */
+  async getPoints(
+    clientId: Types.ObjectId,
+    companyId: Types.ObjectId,
+  ): Promise<{ currentPoints: number; totalAccumulated: number }> {
+    const relation = await this.clientCompanyModel.findOne({
+      clientId,
+      companyId,
+    });
+
+    if (!relation) {
+      return { currentPoints: 0, totalAccumulated: 0 };
+    }
+
+    return {
+      currentPoints: relation.currentPoints,
+      totalAccumulated: relation.totalAccumulated,
+    };
+  }
+
+  /**
+   * Buscar relación por DNI y companyId
+   */
+  /**
+   * Buscar relación por DNI y companyId
+   */
+  async findByClientDni(
+    dni: string,
+    companyId: Types.ObjectId,
+  ): Promise<ClientCompanyDocument> {
+    // 👈 SIN | null
+    const client = await this.clientModel.findOne({ dni });
+    console.log('client-companies', client);
+
+    if (!client) {
+      throw new NotFoundException('Cliente no encontrado'); // 👈 Tirar error
+    }
+
+    const relation = await this.clientCompanyModel
+      .findOne({
+        clientId: client._id,
+        companyId,
+      })
+      .populate('clientId', 'dni name email phone');
+
+    if (!relation) {
+      // 👈 AGREGAR ESTE IF
+      throw new NotFoundException(
+        'No existe relación entre este cliente y la empresa',
+      );
+    }
+
+    return relation;
   }
 }
