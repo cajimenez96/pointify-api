@@ -46,4 +46,12 @@ export class CompleteProfileDto {
   @IsOptional()
   @IsString()
   phone?: string;
+  //mejora post-MVP
+  // @ApiProperty({
+  //   description: 'Contraseña para el cliente',
+  //   example: 'TuPass123',
+  // })
+  // @IsNotEmpty()
+  // @IsString()
+  // password: string;
 }
