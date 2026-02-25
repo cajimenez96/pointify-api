@@ -8,6 +8,10 @@ import {
   Transaction,
   TransactionDocument,
 } from '../../schemas/transaction.schema';
+import {
+  ClientCompany,
+  ClientCompanyDocument,
+} from '../../schemas/client-company.schema';
 
 @Injectable()
 export class SuperAdminDashboardService {
@@ -17,6 +21,8 @@ export class SuperAdminDashboardService {
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
     @InjectModel(Transaction.name)
     private transactionModel: Model<TransactionDocument>,
+    @InjectModel(ClientCompany.name)
+    private clientCompanyModel: Model<ClientCompanyDocument>,
   ) {}
 
   async getStats() {
@@ -64,7 +70,7 @@ export class SuperAdminDashboardService {
       ]),
 
       // Top 5 companies by client count
-      this.clientModel.aggregate([
+      this.clientCompanyModel.aggregate([
         { $match: { isActive: true } },
         { $group: { _id: '$companyId', clientCount: { $sum: 1 } } },
         { $sort: { clientCount: -1 } },
@@ -151,7 +157,7 @@ export class SuperAdminDashboardService {
       subscriptionEndDate: c.subscriptionEndDate,
       daysRemaining: Math.ceil(
         (new Date(c.subscriptionEndDate).getTime() - now.getTime()) /
-          (1000 * 60 * 60 * 24),
+        (1000 * 60 * 60 * 24),
       ),
     }));
 
