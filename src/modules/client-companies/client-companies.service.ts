@@ -22,7 +22,7 @@ export class ClientCompaniesService {
     private clientCompanyModel: Model<ClientCompanyDocument>,
     @InjectModel(Client.name)
     private clientModel: Model<ClientDocument>, // 👈 AGREGAR
-  ) { }
+  ) {}
 
   /**
    * Crear una nueva relación Cliente-Empresa
@@ -64,14 +64,13 @@ export class ClientCompaniesService {
     query: QueryClientCompanyDto,
   ): Promise<ClientCompanyDocument[]> {
     const filter: any = { companyId };
-
     if (query.clientId) {
       filter.clientId = new Types.ObjectId(query.clientId);
     }
 
     return this.clientCompanyModel
       .find(filter)
-      .populate('clientId', 'dni name email phone')
+      .populate('clientId', 'dni name email phone status')
       .sort({ createdAt: -1 })
       .exec();
   }
@@ -88,7 +87,7 @@ export class ClientCompaniesService {
         _id: new Types.ObjectId(id),
         companyId,
       })
-      .populate('clientId', 'dni name email phone');
+      .populate('clientId', 'dni name email phone status');
 
     if (!relation) {
       throw new NotFoundException('Relación no encontrada');
@@ -109,7 +108,7 @@ export class ClientCompaniesService {
         clientId: new Types.ObjectId(clientId),
         companyId,
       })
-      .populate('clientId', 'dni name email phone');
+      .populate('clientId', 'dni name email phone status');
 
     if (!relation) {
       throw new NotFoundException(
@@ -264,7 +263,6 @@ export class ClientCompaniesService {
   ): Promise<ClientCompanyDocument> {
     // 👈 SIN | null
     const client = await this.clientModel.findOne({ dni });
-    console.log('client-companies', client);
 
     if (!client) {
       throw new NotFoundException('Cliente no encontrado'); // 👈 Tirar error
@@ -275,7 +273,7 @@ export class ClientCompaniesService {
         clientId: client._id,
         companyId,
       })
-      .populate('clientId', 'dni name email phone');
+      .populate('clientId', 'dni name email phone status');
 
     if (!relation) {
       // 👈 AGREGAR ESTE IF
