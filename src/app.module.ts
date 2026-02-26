@@ -8,6 +8,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { UsersModule } from './modules/users/users.module';
+import { ClientCompaniesModule } from './modules/client-companies/client-companies.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from './modules/users/users.module';
     TransactionsModule,
     SettingsModule,
     DashboardModule,
+    ClientCompaniesModule,
   ],
 })
 export class AppModule {}

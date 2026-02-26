@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Client, ClientDocument } from '../../schemas/client.schema';
 import {
   Transaction,
   TransactionDocument,
 } from '../../schemas/transaction.schema';
+
+import {
+  ClientCompany,
+  ClientCompanyDocument,
+} from '../../schemas/client-company.schema';
 
 type TotalPointsResult = {
   _id: null;
@@ -15,16 +19,16 @@ type TotalPointsResult = {
 @Injectable()
 export class DashboardService {
   constructor(
-    @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
     @InjectModel(Transaction.name)
     private transactionModel: Model<TransactionDocument>,
+    @InjectModel(ClientCompany.name)
+    private clientCompanyModel: Model<ClientCompanyDocument>,
   ) {}
   async getStats(companyId: Types.ObjectId) {
     const companyIdStr = companyId.toString();
-    // Total de clientes de esta empresa
-    const totalClients = await this.clientModel.countDocuments({
-      companyId: companyIdStr,
-      isActive: true,
+    // Total de clientes de esta empresa (desde ClientCompany)
+    const totalClients = await this.clientCompanyModel.countDocuments({
+      companyId,
     });
 
     // Total de transacciones de esta empresa
@@ -32,13 +36,12 @@ export class DashboardService {
       companyId: companyIdStr,
     });
 
-    // Total de puntos emitidos (suma de totalAccumulated de todos los clientes)
+    // Total de puntos emitidos (desde ClientCompany)
     const totalPointsResult =
-      await this.clientModel.aggregate<TotalPointsResult>([
+      await this.clientCompanyModel.aggregate<TotalPointsResult>([
         {
           $match: {
-            companyId: companyIdStr,
-            isActive: true,
+            companyId,
           },
         },
         {

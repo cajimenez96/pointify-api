@@ -9,7 +9,7 @@ export type CompanyDocument = Company & Document;
  */
 @Schema({ timestamps: true })
 export class Company {
-  @Prop({ required: true, unique: true, minlength: 3, maxlength: 20 })
+  @Prop({ required: true, minlength: 3, maxlength: 20 })
   companyCode: string; // Código único de la empresa (ej: "EMP001", "ACME2026")
 
   @Prop({ required: true, minlength: 2, maxlength: 200 })
@@ -17,7 +17,6 @@ export class Company {
 
   @Prop({
     required: true,
-    unique: true,
     match: /^\d{11}$/,
   })
   cuitCuil: string; // CUIT/CUIL - Identificación fiscal (11 dígitos)

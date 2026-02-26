@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
   Request,
+  Param,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { TransactionsService } from './transactions.service';
@@ -59,7 +60,7 @@ export class TransactionsController {
 
   @Get('client/:dni')
   @Roles('admin', 'cashier')
-  async findByClient(@Request() req, @Query('dni') dni: string) {
+  async findByClient(@Request() req, @Param('dni') dni: string) {
     return this.transactionsService.findByClient(req.companyId, dni);
   }
 }

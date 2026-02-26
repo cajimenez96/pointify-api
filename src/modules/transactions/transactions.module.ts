@@ -10,6 +10,8 @@ import { Company, CompanySchema } from '../../schemas/company.schema';
 import { TransactionsService } from './transactions.service';
 import { TransactionsController } from './transactions.controller';
 
+import { ClientCompaniesModule } from '../client-companies/client-companies.module';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -18,6 +20,7 @@ import { TransactionsController } from './transactions.controller';
       { name: Client.name, schema: ClientSchema },
       { name: Company.name, schema: CompanySchema },
     ]),
+    ClientCompaniesModule,
   ],
   providers: [TransactionsService],
   controllers: [TransactionsController],
