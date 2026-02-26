@@ -218,8 +218,6 @@ export class ClientsService {
   // }
   // mejora post-mvp
   // async getMyProfile(clientId: string) {
-  //   console.log('estoy aqui');
-  //   console.log(clientId);
   //   const client = await this.clientModel
   //     .findById(clientId)
   //     .select('-password');
@@ -260,7 +258,6 @@ export class ClientsService {
     query: any,
   ): Promise<any[]> {
     const queryDto: any = {};
-    console.log('estoy aqui');
     if (query.clientId) {
       queryDto.clientId = query.clientId;
     }

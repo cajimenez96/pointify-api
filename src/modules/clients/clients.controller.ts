@@ -70,7 +70,6 @@ export class ClientsController {
   })
   async completeProfile(@Body() dto: CompleteProfileDto) {
     const client = await this.clientsService.completeProfileByCompanyCode(dto);
-    console.log({ 'controlador:': client });
     if (!client) {
       throw new NotFoundException(
         'Cliente no encontrado o ya tiene perfil completo',
