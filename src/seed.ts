@@ -29,13 +29,11 @@ async function bootstrap() {
     });
 
     if (existingAdmin) {
-      console.log('⚠️  El Super Admin ya existe.');
-
-      // Opcional: Resetear password si se desea forzar
-      const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
-      existingAdmin.password = hashedPassword;
-      await existingAdmin.save();
-      console.log('🔄 Contraseña reseteada a:', superAdminData.password);
+      console.log('⚠️  El Super Admin ya existe. No se realizan cambios.');
+      console.log('👤 Usuario:', superAdminData.username);
+      console.log(
+        'ℹ️  Si necesitas resetear la contraseña, hazlo manualmente desde la base de datos.',
+      );
     } else {
       // Crear nuevo Super Admin
       const hashedPassword = await bcrypt.hash(superAdminData.password, 10);
@@ -48,6 +46,9 @@ async function bootstrap() {
       console.log('-----------------------------------');
       console.log('👤 Usuario:', superAdminData.username);
       console.log('🔑 Password:', superAdminData.password);
+      console.log(
+        '⚠️  IMPORTANTE: Cambia la contraseña después del primer login',
+      );
       console.log('-----------------------------------');
     }
 

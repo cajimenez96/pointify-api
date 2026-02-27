@@ -51,26 +51,28 @@ cp .env.example .env
 # Editar .env y configurar MONGODB_URI y JWT_SECRET
 ```
 
-### Inicialización Multi-Tenant (Primera Vez)
+### Inicialización SuperAdmin (Primera Vez)
 
-Si es la primera vez que ejecutas el proyecto o migraste una base de datos single-tenant:
+La primera vez que ejecutes el proyecto, debes crear la cuenta SuperAdmin:
 
 ```bash
-# 1. Compilar el proyecto
-npm run build
+# Opción 1: Desarrollo (con ts-node)
+npm run seed
 
-# 2. Ejecutar script de inicialización
-node dist/scripts/init-multitenant.js
+# Opción 2: Producción (después de compilar)
+npm run build
+npm run seed:prod
 ```
 
 Este script:
 
-- ✅ Crea empresa "DEFAULT" (código: `DEFAULT`)
 - ✅ Crea SuperAdmin (username: `superadmin`, password: `admin123`)
-- ✅ Migra usuarios, clientes, transacciones y configuraciones existentes
-- ✅ Crea índices compuestos para multi-tenancy
+- ✅ Es idempotente: solo crea el SuperAdmin si NO existe
+- ✅ NO modifica la contraseña en ejecuciones posteriores
 
 > ⚠️ **Importante**: Cambiar contraseña del SuperAdmin después del primer login
+>
+> 💡 **Nota**: Este script es seguro ejecutarlo múltiples veces. Si el SuperAdmin ya existe, no realiza ningún cambio.
 
 ### Ejecutar en Desarrollo
 
@@ -78,11 +80,50 @@ Este script:
 # Modo watch (desarrollo)
 npm run start:dev
 
-# Producción
+# Producción (sin seed)
 npm run start:prod
+
+# Producción (con seed automático)
+npm run start:prod:init
 ```
 
 La API estará disponible en `http://localhost:3000`
+
+### 🚀 Despliegue en Coolify
+
+Para desplegar en Coolify, configura el proyecto con los siguientes ajustes:
+
+#### 1. Build Configuration
+
+```bash
+# Build Command
+npm install && npm run build
+```
+
+#### 2. Start Command
+
+```bash
+# Start Command (ejecuta seed automáticamente)
+npm run start:prod:init
+```
+
+Este comando:
+- ✅ Ejecuta el seed automáticamente al iniciar
+- ✅ Crea el SuperAdmin solo si no existe (idempotente)
+- ✅ Inicia el servidor después del seed
+
+#### 3. Variables de Entorno
+
+Configura estas variables en Coolify:
+
+```bash
+MONGODB_URI=mongodb://usuario:password@host:27017/pointify
+JWT_SECRET=tu-clave-secreta-super-segura-cambiala-en-produccion
+PORT=3000
+NODE_ENV=production
+```
+
+> 💡 **Recomendación**: El script `start:prod:init` es seguro ejecutarlo en cada reinicio del contenedor, ya que solo crea el SuperAdmin si no existe.
 
 ---
 
@@ -165,8 +206,7 @@ pointify-api/
 │   │   ├── client.schema.ts      # Clientes (con companyId)
 │   │   ├── transaction.schema.ts # Transacciones (con companyId)
 │   │   └── settings.schema.ts    # Configuración (con companyId)
-│   ├── scripts/
-│   │   └── init-multitenant.ts   # Script de migración e inicialización
+│   ├── seed.ts                   # Script para crear SuperAdmin
 │   └── main.ts
 ├── docs/                         # Documentación completa
 └── README.md
@@ -284,14 +324,17 @@ Documentación Swagger disponible en:
 ## 🛠️ Scripts Disponibles
 
 ```bash
-npm run start          # Iniciar en modo normal
-npm run start:dev      # Modo desarrollo (watch)
-npm run start:prod     # Modo producción
-npm run build          # Compilar TypeScript
-npm run format         # Formatear código con Prettier
-npm run lint           # Lint con ESLint
-npm run test           # Tests unitarios
-npm run test:e2e       # Tests E2E
+npm run start              # Iniciar en modo normal
+npm run start:dev          # Modo desarrollo (watch)
+npm run start:prod         # Modo producción
+npm run start:prod:init    # Producción con seed automático (para Coolify)
+npm run build              # Compilar TypeScript
+npm run seed               # Crear SuperAdmin (desarrollo con ts-node)
+npm run seed:prod          # Crear SuperAdmin (producción, requiere build previo)
+npm run format             # Formatear código con Prettier
+npm run lint               # Lint con ESLint
+npm run test               # Tests unitarios
+npm run test:e2e           # Tests E2E
 ```
 
 ---
