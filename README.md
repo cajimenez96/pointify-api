@@ -121,7 +121,14 @@ MONGODB_URI=mongodb://usuario:password@host:27017/pointify
 JWT_SECRET=tu-clave-secreta-super-segura-cambiala-en-produccion
 PORT=3000
 NODE_ENV=production
+CORS_ORIGINS=https://tu-frontend.ejemplo.com,https://www.tu-frontend.ejemplo.com
 ```
+
+**Importante sobre CORS_ORIGINS:**
+- Separa múltiples orígenes con comas
+- Incluye el protocolo (https:// o http://)
+- Si no se configura, por defecto usa localhost (solo para desarrollo)
+- Ejemplo: `CORS_ORIGINS=https://pointify.com,https://www.pointify.com`
 
 > 💡 **Recomendación**: El script `start:prod:init` es seguro ejecutarlo en cada reinicio del contenedor, ya que solo crea el SuperAdmin si no existe.
 
@@ -288,6 +295,11 @@ JWT_SECRET=your-super-secret-key-change-in-production
 
 # Puerto (opcional)
 PORT=3000
+
+# CORS - Orígenes permitidos (opcional)
+# Separar múltiples orígenes con comas
+# Si no se configura, usa localhost por defecto
+CORS_ORIGINS=https://tu-frontend.ejemplo.com,https://www.tu-frontend.ejemplo.com
 ```
 
 ---
