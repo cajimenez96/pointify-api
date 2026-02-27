@@ -1,7 +1,9 @@
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,7 +15,12 @@ async function bootstrap() {
   });
 
   // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+
+  // Global Error Handling & Logging
+  const httpAdapter = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Configuración de Swagger
   const config = new DocumentBuilder()
@@ -31,7 +38,11 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
-  console.log(`🚀 Pointify API ejecutándose en http://localhost:${process.env.PORT}`);
-  console.log(`📚 Documentación Swagger disponible en http://localhost:${process.env.PORT}/api`);
+  console.log(
+    `🚀 Pointify API ejecutándose en http://localhost:${process.env.PORT}`,
+  );
+  console.log(
+    `📚 Documentación Swagger disponible en http://localhost:${process.env.PORT}/api`,
+  );
 }
 bootstrap();

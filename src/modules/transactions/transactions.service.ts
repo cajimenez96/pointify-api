@@ -1,141 +1,285 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Transaction, TransactionDocument } from '../../schemas/transaction.schema';
+import { Model, Types } from 'mongoose';
+import {
+  Transaction,
+  TransactionDocument,
+} from '../../schemas/transaction.schema';
 import { Settings, SettingsDocument } from '../../schemas/settings.schema';
-import { ClientsService } from '../clients/clients.service';
+import { Client, ClientDocument } from '../../schemas/client.schema';
+import { EarnPointsDto } from './dto/earn-points.dto';
+import { RedeemPointsDto } from './dto/redeem-points.dto';
+
+import { ClientCompaniesService } from '../client-companies/client-companies.service';
 
 @Injectable()
 export class TransactionsService {
   constructor(
-    @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
+    @InjectModel(Transaction.name)
+    private transactionModel: Model<TransactionDocument>,
     @InjectModel(Settings.name) private settingsModel: Model<SettingsDocument>,
-    private clientsService: ClientsService,
+    @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
+    private clientCompaniesService: ClientCompaniesService, // 👈 AGREGAR
   ) {}
 
-  async addPoints(dni: string, saleCode: string, cashierId: string) {
-    // 1. Verificar código de venta duplicado PRIMERO (evita duplicados antes de validar cliente)
-    const existingTransaction = await this.transactionModel.findOne({ saleCode });
-    if (existingTransaction) {
-      throw new BadRequestException('Código de venta ya procesado anteriormente');
-    }
+  // ========== EARN (SUMAR PUNTOS) ==========
 
-    // 2. Obtener configuración actual y validar campaña
-    const settings = await this.settingsModel.findOne({ key: 'default' });
+  /**
+   * Sumar puntos por compra de producto
+   */
+  async earnPoints(
+    companyId: Types.ObjectId,
+    dto: EarnPointsDto,
+    userId: string,
+  ) {
+    // 1. Obtener configuración de la empresa
+    const settings = await this.settingsModel.findOne({
+      $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
+    });
     if (!settings) {
-      throw new BadRequestException('No hay configuración del sistema. Contacta al administrador.');
+      throw new NotFoundException('Configuración no encontrada');
     }
 
-    // 2.1. Validar si la campaña está activa manualmente
+    // 1.1 Validar campaña activa
     if (!settings.isActive) {
-      throw new BadRequestException('La campaña no está activa. Contacta al administrador.');
+      throw new BadRequestException('Campaña inactiva');
     }
 
-    // 2.2. Validar fechas de campaña (si están definidas)
+    // 1.2 Validar fechas de campaña
     const now = new Date();
-    if (settings.campaignStartDate && now < new Date(settings.campaignStartDate)) {
-      throw new BadRequestException('La campaña aún no ha comenzado.');
+    if (settings.campaignStartDate && now < settings.campaignStartDate) {
+      throw new BadRequestException('La campaña aún no ha comenzado');
     }
-    if (settings.campaignEndDate && now > new Date(settings.campaignEndDate)) {
-      throw new BadRequestException('La campaña ha finalizado.');
+    if (settings.campaignEndDate && now > settings.campaignEndDate) {
+      throw new BadRequestException('La campaña ha finalizado');
     }
 
-    const pointsTarget = settings.pointsTarget || 10;
+    // 2. Buscar configuración del producto
+    const productConfig = settings.pointsConfig.find(
+      (p) => p.productName === dto.productName && p.isActive,
+    );
+    if (!productConfig) {
+      throw new BadRequestException(
+        `Producto "${dto.productName}" no configurado o inactivo`,
+      );
+    }
 
-    // 3. Buscar o crear cliente (SHADOW CLIENT LOGIC)
-    let client = await this.clientsService.findByDni(dni);
-    
+    const pointsToAdd = productConfig.pointsValue;
+    // 3. Buscar o crear cliente (sin companyId)
+    let client = await this.clientModel.findOne({ dni: dto.dni });
     if (!client) {
-      // Cliente no existe -> Crear "Shadow Client" (sin nombre completo)
-      // Esto permite agregar puntos sin bloquear la fila de caja
-      client = await this.clientsService.createClient({
-        dni,
-        name: '', // Nombre vacío para Shadow User
+      client = await this.clientModel.create({
+        dni: dto.dni,
+        name: `Cliente ${dto.dni}`,
         phone: '',
         email: '',
-        status: 'PENDING', // Marcado como pendiente de registro
+        status: 'PENDING',
       });
     }
 
-    // 4. Crear transacción
-    const transaction = new this.transactionModel({
+    // 5. Crear transacción EARN
+    const transaction = await this.transactionModel.create({
+      companyId,
+      type: 'EARN',
+      dni: dto.dni,
       clientId: client._id,
-      cashierId,
-      saleCode,
-      pointsAdded: 1,
-      date: new Date(),
+      points: pointsToAdd,
+      saleCode: dto.saleCode,
+      productName: dto.productName,
+      userId,
     });
-    await transaction.save();
 
-    // 5. Incrementar puntos
-    const updatedClient = await this.clientsService.incrementPoints(dni, 1);
-    if (!updatedClient) {
-      throw new NotFoundException('Error al actualizar puntos del cliente');
+    if (!transaction) {
+      throw new ConflictException('Error al crear la transacción');
     }
+    // 4. SUMAR puntos en ClientCompany (no en Client)
+    const relation = await this.clientCompaniesService.addPoints(
+      client._id,
+      companyId,
+      pointsToAdd,
+    );
 
-    // 6. Verificar si alcanzó la meta de puntos
-    const rewardReached = updatedClient.currentPoints >= pointsTarget;
-
-    // 7. Si alcanzó la meta, validar stock de ganadores
-    if (rewardReached) {
-      // 7.1. Verificar si hay límite de ganadores configurado
-      if (settings.maxWinners > 0) {
-        // Hay límite de stock
-        if (settings.currentWinners >= settings.maxWinners) {
-          // Stock agotado - NO entregar premio
-          return {
-            success: true,
-            client: {
-              name: updatedClient.name || `Cliente ${updatedClient.dni}`,
-              dni: updatedClient.dni,
-              status: updatedClient.status,
-              currentPoints: updatedClient.currentPoints,
-              totalAccumulated: updatedClient.totalAccumulated,
-            },
-            rewardReached: false, // No se entrega premio
-            stockAvailable: false,
-            message: `Alcanzaste ${pointsTarget} puntos pero no hay premios disponibles. Total acumulado: ${updatedClient.totalAccumulated}`,
-          };
-        }
-        
-        // Hay stock disponible -> Incrementar contador de ganadores
-        await this.settingsModel.findOneAndUpdate(
-          { key: 'default' },
-          { $inc: { currentWinners: 1 } }
-        );
-      }
-
-      // 7.2. RESETEAR puntos a 0 (redención automática)
-      await this.clientsService.redeemReward(dni);
-
-      return {
-        success: true,
-        client: {
-          name: updatedClient.name || `Cliente ${updatedClient.dni}`,
-          dni: updatedClient.dni,
-          status: updatedClient.status,
-          currentPoints: 0, // Mostrar 0 porque se reseteó
-          totalAccumulated: updatedClient.totalAccumulated,
-        },
-        rewardReached: true,
-        stockAvailable: true,
-        rewardName: settings.rewardName || 'Premio',
-        message: `🎉 ¡PREMIO GANADO! Entregar ${settings.rewardName} a ${updatedClient.name || 'Cliente'}`,
-      };
-    }
-
-    // 8. No alcanzó la meta - respuesta normal
     return {
       success: true,
+      transaction,
       client: {
-        name: updatedClient.name || `Cliente ${updatedClient.dni}`,
-        dni: updatedClient.dni,
-        status: updatedClient.status,
-        currentPoints: updatedClient.currentPoints,
-        totalAccumulated: updatedClient.totalAccumulated,
+        dni: client.dni,
+        name: client.name,
+        status: client.status,
+        currentPoints: relation.currentPoints,
+        totalAccumulated: relation.totalAccumulated,
       },
-      rewardReached: false,
-      message: 'Puntos agregados exitosamente',
+      pointsAdded: pointsToAdd,
+      message: `+${pointsToAdd} puntos por ${dto.productName}`,
     };
+  }
+
+  // ========== REDEEM (CANJEAR PUNTOS) ==========
+
+  /**
+   * Canjear puntos por premio
+   */
+  async redeemPoints(
+    companyId: Types.ObjectId,
+    dto: RedeemPointsDto,
+    userId: string,
+  ) {
+    // 1. Buscar cliente
+    const client = await this.clientModel.findOne({ dni: dto.dni });
+    if (!client) {
+      throw new NotFoundException('Cliente no encontrado');
+    }
+
+    // 2. Obtener configuración y premio
+    const settings = await this.settingsModel.findOne({
+      $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
+    });
+    if (!settings) {
+      throw new NotFoundException('Configuración no encontrada');
+    }
+
+    const reward = settings.rewards.find(
+      (r: any) => r._id.toString() === dto.rewardId,
+    );
+    if (!reward || !reward.isActive) {
+      throw new NotFoundException('Premio no encontrado o inactivo');
+    }
+
+    // 3. Validar stock
+    if (reward.stock !== null && reward.stock <= 0) {
+      throw new BadRequestException(
+        `Premio "${reward.name}" sin stock disponible`,
+      );
+    }
+
+    // 4. Validar saldo del cliente en ClientCompany
+    const relation = await this.clientCompaniesService.findOrCreate(
+      client._id,
+      companyId,
+    );
+
+    if (relation.currentPoints < reward.pointsCost) {
+      throw new BadRequestException(
+        `Saldo insuficiente. Necesita ${reward.pointsCost} puntos, tiene ${relation.currentPoints}`,
+      );
+    }
+
+    // 5. Restar puntos
+
+    await this.clientCompaniesService.deductPoints(
+      client._id,
+      companyId,
+      reward.pointsCost,
+    );
+
+    // 5.1 Restar stock del premio
+    if (reward.stock !== null) {
+      const settingsToUpdate = await this.settingsModel.findOne({
+        $or: [{ companyId: companyId }, { companyId: companyId.toString() }],
+      });
+
+      if (settingsToUpdate) {
+        const rewardToUpdate = settingsToUpdate.rewards.find(
+          (r: any) => r._id.toString() === dto.rewardId,
+        );
+        if (rewardToUpdate && rewardToUpdate.stock !== null) {
+          rewardToUpdate.stock -= 1;
+          await settingsToUpdate.save();
+        }
+      }
+    }
+
+    // 5.2 Crear transacción REDEEM
+    const transaction = await this.transactionModel.create({
+      companyId,
+      type: 'REDEEM',
+      dni: dto.dni,
+      clientId: client._id,
+      points: reward.pointsCost,
+      rewardId: dto.rewardId,
+      rewardName: reward.name,
+      userId,
+    });
+
+    // Obtener puntos actualizados
+    const updatedRelation = await this.clientCompaniesService.getPoints(
+      client._id,
+      companyId,
+    );
+
+    return {
+      success: true,
+      transaction,
+      client: {
+        dni: client.dni,
+        name: client.name,
+        status: client.status,
+        currentPoints: updatedRelation.currentPoints,
+        totalAccumulated: updatedRelation.totalAccumulated,
+      },
+      reward: {
+        name: reward.name,
+        pointsCost: reward.pointsCost,
+        stockRemaining: reward.stock !== null ? reward.stock - 1 : null,
+      },
+      message: `🎉 Premio "${reward.name}" canjeado exitosamente`,
+    };
+  }
+
+  // ========== HISTORIAL ==========
+
+  /**
+   * Obtener historial de transacciones de la empresa
+   */
+  async findAll(
+    companyId: Types.ObjectId,
+    page = 1,
+    limit = 20,
+    type?: 'EARN' | 'REDEEM',
+  ) {
+    const filter: any = { companyId };
+    if (type) {
+      filter.type = type;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.transactionModel
+        .find(filter)
+        .populate('clientId', 'dni name')
+        .populate('userId', 'username name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.transactionModel.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Obtener historial de un cliente específico
+   */
+  async findByClient(companyId: Types.ObjectId, dni: string) {
+    return this.transactionModel
+      .find({ companyId, dni })
+      .populate('userId', 'username name')
+      .sort({ createdAt: -1 })
+      .exec();
   }
 }

@@ -1,30 +1,63 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Client, ClientDocument } from '../../schemas/client.schema';
-import { Transaction, TransactionDocument } from '../../schemas/transaction.schema';
+import { Model, Types } from 'mongoose';
+import {
+  Transaction,
+  TransactionDocument,
+} from '../../schemas/transaction.schema';
+
+import {
+  ClientCompany,
+  ClientCompanyDocument,
+} from '../../schemas/client-company.schema';
+
+type TotalPointsResult = {
+  _id: null;
+  total: number;
+};
 
 @Injectable()
 export class DashboardService {
   constructor(
-    @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
-    @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
+    @InjectModel(Transaction.name)
+    private transactionModel: Model<TransactionDocument>,
+    @InjectModel(ClientCompany.name)
+    private clientCompanyModel: Model<ClientCompanyDocument>,
   ) {}
+  async getStats(companyId: Types.ObjectId) {
+    const companyIdStr = companyId.toString();
+    // Total de clientes de esta empresa (desde ClientCompany)
+    const totalClients = await this.clientCompanyModel.countDocuments({
+      companyId,
+    });
 
-  async getStats() {
-    const totalClients = await this.clientModel.countDocuments({ isActive: true });
-    const totalTransactions = await this.transactionModel.countDocuments();
-    
-    const totalPointsResult = await this.clientModel.aggregate([
-      { $match: { isActive: true } },
-      { $group: { _id: null, total: { $sum: '$totalAccumulated' } } },
-    ]);
+    // Total de transacciones de esta empresa
+    const totalTransactions = await this.transactionModel.countDocuments({
+      companyId: companyIdStr,
+    });
+
+    // Total de puntos emitidos (desde ClientCompany)
+    const totalPointsResult =
+      await this.clientCompanyModel.aggregate<TotalPointsResult>([
+        {
+          $match: {
+            companyId,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$totalAccumulated' },
+          },
+        },
+      ]);
     const totalPointsIssued = totalPointsResult[0]?.total || 0;
 
+    // Transacciones recientes de esta empresa
     const recentTransactions = await this.transactionModel
-      .find()
+      .find({ companyId })
       .populate('clientId', 'name dni')
-      .populate('cashierId', 'name')
+      .populate('userId', 'name')
       .sort({ createdAt: -1 })
       .limit(10);
 
